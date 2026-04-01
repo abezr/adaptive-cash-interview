@@ -1,56 +1,138 @@
-# C4 Model: Container Diagram
+# C4 — Level 2: Containers
 
-## AdaptiveCash Platform — Containers
+<div align="center">
 
-This diagram shows the major containers (deployable units) that make up the AdaptiveCash platform.
+*Major runtime building blocks of the AdaptiveCash platform*
+
+</div>
+
+---
+
+## Container Diagram
 
 ```mermaid
-C4Container
-    title AdaptiveCash Platform — Container Diagram
+---
+config:
+  look: handDrawn
+---
+flowchart TD
+    bankOp["👤 Bank Operator"]:::person
+    partnerUser["👤 Partner User"]:::person
 
-    Person(bankOperator, "Bank Operator", "Manages cash orders")
-    Person(partnerUser, "Partner User", "Submits orders")
+    subgraph app ["AdaptiveCash Platform"]
+        direction TB
 
-    System_Boundary(adaptiveCash, "AdaptiveCash Platform") {
-        Container(clientPortal, "Client Portal SPA", "React / Angular", "Bank operator dashboard for managing orders, limits, and reports")
-        Container(partnerPortal, "Partner Portal SPA", "React / Angular", "Partner-facing portal for order submission and tracking")
-        Container(webApi, "Web API", "ASP.NET Core", "REST API serving portals and external integrations. Contains all business logic.")
-        Container(backgroundWorker, "Background Worker", ".NET Worker Service", "Processes async tasks: scheduled syncs, report generation, notifications")
-        ContainerDb(database, "Database", "MS SQL / Oracle", "Stores orders, clients, limits, audit trail, configurations")
-        ContainerDb(cache, "Cache", "Redis", "Session data, frequently accessed configs, rate limiting")
-    }
+        subgraph portals ["Client-Facing Portals"]
+            direction LR
+            clientPortal["🖥️ Client Portal SPA\nReact / Angular\nBank operator dashboard"]:::portal
+            partnerPortal["🖥️ Partner Portal SPA\nReact / Angular\nOrder submission & tracking"]:::portal
+        end
 
-    System_Ext(bankCore, "Core Banking System", "Order confirmation and settlement")
-    System_Ext(partnerApi, "Partner Integration API", "External partner systems")
-    System_Ext(emailService, "Email / SMS Gateway", "Notifications")
+        subgraph backend ["Backend Services"]
+            direction LR
+            webApi["🔧 Web API\nASP.NET Core\nBusiness logic & integrations"]:::api
+            worker["⚙️ Background Worker\n.NET Worker Service\nAsync tasks & notifications"]:::worker
+        end
 
-    Rel(bankOperator, clientPortal, "Uses", "HTTPS")
-    Rel(partnerUser, partnerPortal, "Uses", "HTTPS")
-    Rel(clientPortal, webApi, "API calls", "HTTPS / JSON")
-    Rel(partnerPortal, webApi, "API calls", "HTTPS / JSON")
-    Rel(partnerApi, webApi, "Submits orders", "REST API")
-    Rel(webApi, database, "Reads/Writes", "ADO.NET / NHibernate")
-    Rel(webApi, cache, "Reads/Writes", "StackExchange.Redis")
-    Rel(webApi, bankCore, "Confirms orders", "REST / SOAP")
-    Rel(backgroundWorker, database, "Reads/Writes", "ADO.NET / NHibernate")
-    Rel(backgroundWorker, emailService, "Sends notifications", "SMTP / REST")
-    Rel(backgroundWorker, webApi, "Internal API calls", "HTTPS")
+        portals --> backend
+        webApi -. "Internal Events" .-> worker
+    end
+
+    bankOp -- "HTTPS" --> clientPortal
+    partnerUser -- "HTTPS" --> partnerPortal
+
+    partnerApiExt["☁️ Partner API"]:::ext -- "REST" --> webApi
+
+    webApi -- "NHibernate / ADO.NET" --> db[("💾 Database\nMS SQL / Oracle")]:::db
+    webApi -- "StackExchange.Redis" --> cache[("💾 Redis\nCache & rate limiting")]:::cache
+    webApi -- "REST / SOAP" --> bankCore["☁️ Core Banking System"]:::ext
+    worker -- "NHibernate / ADO.NET" --> db
+    worker -- "SMTP / REST" --> email["☁️ Email / SMS Gateway"]:::ext
+
+    classDef person fill:transparent,stroke:#2B6CB0,stroke-width:3px
+    classDef portal fill:transparent,stroke:#805AD5,stroke-width:3px
+    classDef api fill:transparent,stroke:#319795,stroke-width:3px
+    classDef worker fill:transparent,stroke:#D69E2E,stroke-width:3px
+    classDef db fill:transparent,stroke:#3182CE,stroke-width:3px
+    classDef cache fill:transparent,stroke:#E53E3E,stroke-width:3px
+    classDef ext fill:transparent,stroke:#DD6B20,stroke-width:3px
 ```
 
-## Container Descriptions
+---
 
-| Container | Technology | Responsibility |
-|-----------|-----------|----------------|
-| **Client Portal SPA** | React or Angular + TypeScript | Bank operator interface: dashboards, order management, limit configuration, reports |
-| **Partner Portal SPA** | React or Angular + TypeScript | Partner interface: order submission, status tracking, delivery scheduling |
-| **Web API** | ASP.NET Core 8, REST | Central business logic: order processing, validation, limit enforcement, auth, audit |
-| **Background Worker** | .NET Worker Service | Async processing: scheduled tasks, notification dispatching, report generation |
-| **Database** | MS SQL Server or Oracle | Persistent storage for all domain data |
-| **Cache** | Redis | Performance optimization: session state, hot configurations, rate limiting counters |
+## Containers Explained
 
-## Key Design Decisions
+### 1. Client Portal SPA
+**Purpose:**
+- bank operator dashboard for managing orders, limits, and reports;
+- visualizes order processing workflow and system health;
+- role-based access for different operator levels.
 
-1. **Monolithic API with modular internals** — The Web API is a single deployable unit but internally organized by feature modules. This simplifies deployment for banking customers who prefer on-premise installations.
-2. **Dual SPA portals** — Separate portals for bank operators and partners to enforce different access models and UX flows.
-3. **Background Worker** — Decoupled from the API to handle long-running or scheduled operations without blocking request processing.
-4. **Database agnosticism** — NHibernate is used as ORM specifically to support both MS SQL and Oracle, as different bank clients use different database engines.
+### 2. Partner Portal SPA
+**Purpose:**
+- partner-facing portal for order submission and status tracking;
+- delivery scheduling and historical reports;
+- separate access model from the client portal.
+
+### 3. Web API
+**Purpose:**
+- central business logic: order processing, validation, limit enforcement;
+- authentication and authorization (JWT, RBAC);
+- integration endpoints for partner APIs and banking systems;
+- audit trail recording for regulatory compliance.
+
+**Why it matters:**
+- single deployable with modular internals;
+- simplifies deployment for banking customers who prefer on-premise installations;
+- all business rules enforced in one place.
+
+### 4. Background Worker
+**Purpose:**
+- dispatch notifications on order status changes;
+- scheduled report generation;
+- async processing for long-running operations;
+- retry failed external API calls.
+
+### 5. Database (MS SQL / Oracle)
+Primary durable store through NHibernate.
+
+Typical structure:
+- tenant-isolated order and client tables;
+- audit trail tables;
+- configuration and limit tables;
+- NHibernate chosen specifically for Oracle + MS SQL dual support.
+
+### 6. Redis
+Used for:
+- session data and frequently accessed configurations;
+- rate limiting for partner API endpoints;
+- caching hot-path queries (daily totals, client limits).
+
+---
+
+## Container Interactions
+
+### Synchronous path
+```text
+Portal → Web API → Validate → Check limits → Save → Audit → Response
+```
+
+### Asynchronous path
+```text
+Order saved → Internal event → Worker → Notification → Email/SMS
+```
+
+### External integration path
+```text
+Web API → Core Banking System → Confirmation → Update order status → Audit
+```
+
+---
+
+## Why NHibernate
+
+The platform supports both MS SQL and Oracle because different bank clients use different database engines. NHibernate provides mature database-agnostic ORM support with:
+- dialect-based SQL generation;
+- second-level caching;
+- batch fetching strategies;
+- XML or Fluent mapping.

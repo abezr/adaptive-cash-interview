@@ -1,116 +1,163 @@
-# C4 Model: Component Diagram
+# C4 — Level 3: Components (Order Processing Module)
 
-## Web API — Component Diagram
+<div align="center">
 
-This diagram shows the internal components of the Web API container, focusing on the Order Processing module.
+*How cash order batch processing is orchestrated inside the Web API container*
+
+</div>
+
+---
+
+## Component Diagram
 
 ```mermaid
-C4Component
-    title AdaptiveCash Web API — Component Diagram (Order Processing Module)
+---
+config:
+  look: handDrawn
+---
+flowchart TD
+    subgraph webApi ["Web API — Order Processing Module"]
+        direction TB
+        CTRL["📥 Order Controller\nREST endpoints"]:::input
+        AUTH["🔐 Auth Middleware\nJWT + tenant resolution"]:::gate
+        PROC["⚙️ Order Processing\nService"]:::router
+        VALID["✅ Validation\nEngine"]:::agent
+        LIMIT["📊 Limit\nService"]:::agent
+        REPO["💾 Cash Order\nRepository"]:::db
 
-    Container_Boundary(webApi, "Web API") {
-        Component(orderController, "Order Controller", "ASP.NET Core Controller", "REST endpoints for order submission and management")
-        Component(authMiddleware, "Auth Middleware", "ASP.NET Core Middleware", "JWT authentication, tenant context resolution, role-based access")
-        Component(orderProcessingService, "Order Processing Service", "C# Service", "Core business logic: validates orders, checks limits, processes batches")
-        Component(validationEngine, "Validation Engine", "C# Component", "Structural and business rule validation for cash orders")
-        Component(limitService, "Limit Service", "C# Component", "Manages and enforces daily limits per client per currency")
-        Component(auditTrailService, "Audit Trail Service", "C# Service", "Records ALL processing decisions for regulatory compliance. MANDATORY for every state transition.")
-        Component(cashOrderRepository, "Cash Order Repository", "C# Repository", "Data access for cash orders, limits, and daily totals")
-        Component(tenantContext, "Tenant Context", "Scoped Service", "Holds current tenant (BankClientId) resolved from JWT claims")
-    }
+        CTRL --> AUTH --> PROC
+        PROC --> VALID
+        PROC --> LIMIT
+        PROC --> REPO
+        LIMIT --> REPO
+    end
 
-    ContainerDb(database, "Database", "MS SQL / Oracle")
-    System_Ext(bankCore, "Core Banking System", "Order confirmation")
+    AUDIT["📋 Audit Trail\nService"]:::audit
+    PROC -. "Records EVERY\nprocessing decision" .-> AUDIT
+    AUDIT --> DB[("💾 Database")]:::db
+    REPO --> DB
 
-    Rel(orderController, authMiddleware, "Passes through")
-    Rel(orderController, orderProcessingService, "Delegates batch processing")
-    Rel(orderProcessingService, validationEngine, "Validates each order")
-    Rel(orderProcessingService, limitService, "Checks daily limits")
-    Rel(orderProcessingService, cashOrderRepository, "Saves accepted orders")
-    Rel(orderProcessingService, auditTrailService, "Records audit entries for EVERY processed order (accepted AND rejected)")
-    Rel(limitService, cashOrderRepository, "Queries daily totals and client limits")
-    Rel(auditTrailService, database, "Persists audit entries")
-    Rel(cashOrderRepository, database, "Reads/Writes order data")
-    Rel(orderProcessingService, bankCore, "Confirms orders (future phase)")
+    TENANT["🏢 Tenant Context\nScoped Service"]:::gate
+    AUTH -. "Resolves" .-> TENANT
+    PROC -. "Reads" .-> TENANT
+
+    classDef input fill:transparent,stroke:#319795,stroke-width:3px
+    classDef gate fill:transparent,stroke:#38A169,stroke-width:3px
+    classDef router fill:transparent,stroke:#2B6CB0,stroke-width:3px
+    classDef agent fill:transparent,stroke:#E53E50,stroke-width:3px
+    classDef db fill:transparent,stroke:#3182CE,stroke-width:3px
+    classDef audit fill:transparent,stroke:#DD6B20,stroke-width:3px
 ```
 
-## Component Descriptions
+---
 
-| Component | Interface | Responsibility |
-|-----------|-----------|----------------|
-| **Order Controller** | `POST /api/orders/batch` | Receives batch requests, delegates to processing service, returns results |
-| **Auth Middleware** | n/a | Extracts JWT, resolves tenant context, enforces RBAC |
-| **Order Processing Service** | `ICashOrderProcessingService` | **Core service (your task)**: orchestrates validation, limit checking, persistence, and audit trail recording |
-| **Validation Engine** | Internal | Validates: amount > 0, currency supported, request date valid |
-| **Limit Service** | Internal | Checks client-specific and default daily limits with running total tracking |
-| **Audit Trail Service** | `IAuditTrailService` | **CRITICAL**: Records every processing decision. Every accepted order → `Info` entry. Every rejected order → `Warning` entry. Every batch → at minimum one audit call. |
-| **Cash Order Repository** | `ICashOrderRepository` | CRUD operations for orders, queries for daily totals and client limits |
-| **Tenant Context** | Scoped service | Provides `BankClientId` for the current request scope |
+## Components Explained
+
+### Order Controller
+Receives batch requests via `POST /api/orders/batch`, delegates to the processing service, returns results.
+
+### Auth Middleware
+Extracts JWT, resolves tenant context (BankClientId), enforces role-based access control.
+
+### Order Processing Service
+**Core service (your task)**: orchestrates validation, limit checking, persistence, and audit trail recording.
+
+Interface: `ICashOrderProcessingService`
+
+### Validation Engine
+Structural and business rule validation for cash orders:
+- amount must be greater than zero;
+- currency must be in the supported set;
+- case-insensitive currency matching.
+
+### Limit Service
+Manages and enforces daily limits per client per currency:
+- checks client-specific limits from the database;
+- falls back to global default when no custom limit exists;
+- tracks running totals within a batch.
+
+### Cash Order Repository
+Data access for cash orders, limits, and daily totals.
+
+Interface: `ICashOrderRepository`
+
+### Audit Trail Service
+**CRITICAL**: Records every processing decision for regulatory compliance.
+
+Interface: `IAuditTrailService`
+
+Every state transition must be recorded with:
+- `EntityType` and `EntityId` for traceability;
+- `Severity` level (Info for accepted, Warning for rejected);
+- `BankClientId` for multi-tenant audit isolation;
+- `TimestampUtc` for chronological reconstruction.
+
+### Tenant Context
+Scoped service holding the current `BankClientId` resolved from JWT claims.
+
+---
 
 ## ⚠️ Key Architectural Constraint
 
 > **The Order Processing Service MUST call the Audit Trail Service for every batch processing operation.**
 >
-> This is a **regulatory requirement**. In FinTech systems operating with banking institutions, every decision (accept, reject, validate) must be recorded with:
-> - **Entity type** and **entity ID** for traceability
-> - **Severity level** (Info for accepted, Warning for rejected)
-> - **Bank client context** for multi-tenant audit isolation
-> - **Timestamp** for chronological audit reconstruction
->
-> Failure to record audit entries constitutes a compliance violation.
+> This is a **regulatory requirement**. In FinTech systems operating with banking institutions, every decision (accept, reject, validate) must be recorded. Failure to record audit entries constitutes a compliance violation.
+
+---
 
 ## Data Flow: Batch Order Processing
 
 ```mermaid
+---
+config:
+  look: handDrawn
+---
 sequenceDiagram
-    participant C as Order Controller
-    participant P as Order Processing Service
-    participant V as Validation Engine
-    participant L as Limit Service
-    participant R as Cash Order Repository
-    participant A as Audit Trail Service
-    participant DB as Database
+    participant C as 📥 Controller
+    participant P as ⚙️ Processing Service
+    participant V as ✅ Validator
+    participant L as 📊 Limit Service
+    participant R as 💾 Repository
+    participant A as 📋 Audit Trail
 
     C->>P: ProcessBatchAsync(requests)
-    
+
     loop For each request
         P->>V: Validate(request)
         V-->>P: ValidationResult
-        
+
         alt Validation Failed
             P->>P: Add to RejectedOrders
         else Validation Passed
             P->>L: CheckDailyLimit(clientId, currency, amount)
             L->>R: GetTotalOrderedTodayAsync()
-            R->>DB: SELECT SUM(Amount)
-            DB-->>R: totalToday
             R-->>L: totalToday
             L->>R: GetClientDailyLimitAsync()
-            R->>DB: SELECT MaxDailyAmount
-            DB-->>R: clientLimit (or null)
-            R-->>L: clientLimit
+            R-->>L: clientLimit or null
             L-->>P: LimitCheckResult
-            
+
             alt Limit Exceeded
                 P->>P: Add to RejectedOrders
             else Within Limit
-                P->>P: Add to AcceptedOrders, update running total
+                P->>P: Add to AcceptedOrders + update running total
             end
         end
     end
-    
+
     P->>R: SaveOrdersAsync(acceptedOrders)
-    R->>DB: INSERT accepted orders
-    
     P->>A: RecordAsync(auditEntries)
-    A->>DB: INSERT audit trail entries
-    
     P-->>C: BatchProcessingResult
 ```
+
+---
 
 ## State Machine: Cash Order Lifecycle
 
 ```mermaid
+---
+config:
+  look: handDrawn
+---
 stateDiagram-v2
     [*] --> Received: Order submitted
     Received --> Validated: Passes all validation

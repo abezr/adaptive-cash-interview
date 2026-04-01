@@ -1,45 +1,97 @@
-# C4 Model: Context Diagram
+# C4 — Level 1: System Context
 
-## System Context — AdaptiveCash Platform
+<div align="center">
 
-This diagram shows the AdaptiveCash platform in the context of its users and external systems.
+*How the AdaptiveCash platform fits into the banking and cash management ecosystem*
+
+</div>
+
+---
+
+## Context Diagram
 
 ```mermaid
-C4Context
-    title AdaptiveCash Platform — System Context
+---
+config:
+  look: handDrawn
+---
+flowchart TD
+    bankOp["👤 Bank Operator"]:::person
+    partnerUser["👤 Partner User"]:::person
 
-    Person(bankOperator, "Bank Operator", "Manages cash orders, monitors operations, configures limits")
-    Person(partnerUser, "Partner User", "Cash-in-transit company operator submitting orders via portal")
+    bankOp -- "Manages orders,\nviews dashboards" --> ac
+    partnerUser -- "Submits orders,\ntracks status" --> ac
 
-    System(adaptiveCash, "AdaptiveCash Platform", "Enterprise FinTech platform automating cash management for banks and CIT companies")
+    subgraph boundary ["AdaptiveCash Platform"]
+        ac["🔧 AdaptiveCash\nEnterprise FinTech Platform\nASP.NET Core + React/Angular"]:::system
+    end
 
-    System_Ext(bankCore, "Core Banking System", "Bank's core system for account management and settlement")
-    System_Ext(partnerApi, "Partner Integration API", "External partner systems sending cash order requests")
-    System_Ext(emailService, "Email / SMS Gateway", "Notification delivery infrastructure")
-    System_Ext(regulatorySystem, "Regulatory Reporting System", "Financial regulator's data submission endpoint")
+    partnerApi["☁️ Partner Integration API"]:::ext -- "Batch order\nsubmission" --> ac
+    ac -- "Confirms orders,\nchecks balances" --> bankCore["☁️ Core Banking System"]:::ext
+    ac -- "Sends notifications" --> email["☁️ Email / SMS Gateway"]:::ext
+    ac -- "Compliance reports" --> regulatory["☁️ Regulatory Reporting"]:::ext
 
-    Rel(bankOperator, adaptiveCash, "Manages orders, views dashboards, configures limits", "HTTPS")
-    Rel(partnerUser, adaptiveCash, "Submits cash orders, views status", "HTTPS")
-    Rel(adaptiveCash, bankCore, "Confirms orders, checks balances, settles transactions", "REST API / SOAP")
-    Rel(partnerApi, adaptiveCash, "Submits batch orders", "REST API")
-    Rel(adaptiveCash, emailService, "Sends notifications", "SMTP / REST")
-    Rel(adaptiveCash, regulatorySystem, "Submits compliance reports", "Secure File Transfer")
+    classDef person fill:transparent,stroke:#2B6CB0,stroke-width:3px
+    classDef system fill:transparent,stroke:#2B6CB0,stroke-width:3px
+    classDef ext fill:transparent,stroke:#DD6B20,stroke-width:3px
 ```
 
-## Key Relationships
+---
 
-| From | To | Interaction | Protocol |
-|------|----|-------------|----------|
-| Bank Operator | AdaptiveCash | Order management, dashboards | HTTPS (SPA) |
-| Partner User | AdaptiveCash | Order submission, status tracking | HTTPS (SPA) |
-| Partner Integration API | AdaptiveCash | Batch order submission | REST API |
-| AdaptiveCash | Core Banking System | Order confirmation, settlement | REST / SOAP |
-| AdaptiveCash | Email/SMS Gateway | Notifications | SMTP / REST |
-| AdaptiveCash | Regulatory Reporting | Compliance reports | SFTP |
+## Actors and External Systems
 
-## Notes
+### Bank Operator
+Manages cash orders, configures client limits, monitors system health through the Client Portal.
 
-- The platform serves **multiple bank clients** (multi-tenant architecture).
-- Each bank client may have multiple partner companies using the platform.
-- All interactions with external systems must be **auditable** for regulatory compliance.
-- The Core Banking System integration is critical-path: if it's unavailable, orders cannot be confirmed.
+Typical actions:
+- review and approve cash orders;
+- configure daily limits per client per currency;
+- view dashboards and audit trails;
+- manage partner access.
+
+### Partner User
+Cash-in-transit company operator who submits orders and tracks delivery status through the Partner Portal.
+
+Typical actions:
+- submit batch cash orders;
+- track order status and delivery;
+- view historical reports.
+
+### Partner Integration API
+External partner systems that submit orders programmatically via REST API.
+
+### Core Banking System
+Bank's core system for account management and settlement. The platform confirms orders and settles transactions through this integration.
+
+### Email / SMS Gateway
+Notification delivery infrastructure for order confirmations, status updates, and escalation alerts.
+
+### Regulatory Reporting System
+Financial regulator's data submission endpoint. The platform generates and submits compliance reports covering all processed transactions and audit trail data.
+
+---
+
+## System Responsibilities
+
+The AdaptiveCash platform is responsible for:
+- receiving and validating cash order requests from portals and APIs;
+- enforcing daily limits and business rules per bank client;
+- confirming orders with the core banking system;
+- recording a full audit trail of every processing decision;
+- providing dashboards and reports for bank operators;
+- sending notifications on order status changes;
+- generating regulatory compliance reports.
+
+It is **not** responsible for:
+- replacing the core banking system;
+- physical cash logistics and delivery;
+- direct management of bank accounts.
+
+---
+
+## Key Risks Visible at Context Level
+
+- Data isolation failure between bank clients in multi-tenant setup
+- External banking system unavailability blocking order confirmation
+- Regulatory non-compliance if audit trail is incomplete
+- Partner API abuse if rate limiting and validation are insufficient

@@ -1,29 +1,39 @@
-# C4 Model: Code Diagram
+# C4 — Level 4: Code
 
-## CashOrderProcessingService — Code-Level Design
+<div align="center">
 
-This diagram shows the internal structure of the Order Processing Service at the code level.
+*Internal structure of the Order Processing Service at the code level*
+
+</div>
+
+---
+
+## Class Diagram
 
 ```mermaid
+---
+config:
+  look: handDrawn
+---
 classDiagram
     class ICashOrderProcessingService {
         <<interface>>
-        +ProcessBatchAsync(requests, cancellationToken) Task~BatchProcessingResult~
+        +ProcessBatchAsync(requests, ct) Task~BatchProcessingResult~
     }
 
     class CashOrderProcessingService {
         -ICashOrderRepository _repository
         -IAuditTrailService _auditTrailService
         -CashOrderProcessingOptions _options
-        -ILogger~CashOrderProcessingService~ _logger
-        +ProcessBatchAsync(requests, cancellationToken) Task~BatchProcessingResult~
+        -ILogger _logger
+        +ProcessBatchAsync(requests, ct) Task~BatchProcessingResult~
     }
 
     class ICashOrderRepository {
         <<interface>>
-        +GetTotalOrderedTodayAsync(bankClientId, currency, date, ct) Task~decimal~
+        +GetTotalOrderedTodayAsync(clientId, currency, date, ct) Task~decimal~
         +SaveOrdersAsync(orders, ct) Task
-        +GetClientDailyLimitAsync(bankClientId, currency, ct) Task~ClientDailyLimit?~
+        +GetClientDailyLimitAsync(clientId, currency, ct) Task~ClientDailyLimit~
     }
 
     class IAuditTrailService {
@@ -51,15 +61,13 @@ classDiagram
         +DateTime RequestedDate
         +OrderStatus Status
         +DateTime CreatedAtUtc
-        +string? RejectionReason
+        +string RejectionReason
     }
 
     class BatchProcessingResult {
         +List~CashOrder~ AcceptedOrders
         +List~RejectedOrder~ RejectedOrders
         +int TotalCount
-        +int AcceptedCount
-        +int RejectedCount
     }
 
     class RejectedOrder {
@@ -73,34 +81,9 @@ classDiagram
         +string EntityId
         +string Action
         +AuditSeverity Severity
-        +string? Details
+        +string Details
         +DateTime TimestampUtc
-        +int? BankClientId
-    }
-
-    class ClientDailyLimit {
         +int BankClientId
-        +string Currency
-        +decimal MaxDailyAmount
-    }
-
-    class OrderStatus {
-        <<enumeration>>
-        Received
-        Validated
-        Processing
-        Confirmed
-        Completed
-        Rejected
-        Failed
-    }
-
-    class AuditSeverity {
-        <<enumeration>>
-        Info
-        Warning
-        Error
-        Critical
     }
 
     CashOrderProcessingService ..|> ICashOrderProcessingService
@@ -114,63 +97,73 @@ classDiagram
     BatchProcessingResult --> CashOrder : contains
     BatchProcessingResult --> RejectedOrder : contains
     RejectedOrder --> CashOrderRequest : wraps
-    CashOrder --> OrderStatus : has
-    AuditTrailEntry --> AuditSeverity : has
-    ICashOrderRepository ..> ClientDailyLimit : returns
 ```
+
+---
 
 ## Method Flow: ProcessBatchAsync
 
+```mermaid
+---
+config:
+  look: handDrawn
+---
+flowchart TD
+    START["ProcessBatchAsync(requests)"]:::input
+    GUARD["Guard: null check"]:::gate
+    INIT["Initialize:\naccepted, rejected,\naudit entries,\nrunning totals"]:::context
+
+    START --> GUARD --> INIT
+
+    LOOP{"For each\nrequest"}:::router
+    INIT --> LOOP
+
+    VAMT["Validate\namount > 0"]:::agent
+    LOOP --> VAMT
+
+    VAMT -- "Invalid" --> REJ1["Add to rejected\n+ Warning audit"]:::escalation
+    VAMT -- "Valid" --> VCUR["Validate\ncurrency supported"]:::agent
+
+    VCUR -- "Invalid" --> REJ2["Add to rejected\n+ Warning audit"]:::escalation
+    VCUR -- "Valid" --> GLIM["Get daily limit\n(client-specific or default)"]:::context
+
+    GLIM --> GTOT["Get current total\n(DB + batch running total)"]:::context
+    GTOT --> CHKLIM{"Within\nlimit?"}:::gate
+
+    CHKLIM -- "Exceeded" --> REJ3["Add to rejected\n+ Warning audit"]:::escalation
+    CHKLIM -- "OK" --> ACC["Create CashOrder\nStatus = Validated\n+ Info audit\n+ update running total"]:::output
+
+    REJ1 --> NEXT["Next request"]:::router
+    REJ2 --> NEXT
+    REJ3 --> NEXT
+    ACC --> NEXT
+    NEXT --> LOOP
+
+    LOOP -- "Done" --> SAVE{"Any\naccepted?"}:::gate
+    SAVE -- "Yes" --> PERSIST["SaveOrdersAsync"]:::db
+    SAVE -- "No" --> AUDITSTEP
+    PERSIST --> AUDITSTEP["RecordAsync\n(audit entries)"]:::audit
+    AUDITSTEP --> RET["Return\nBatchProcessingResult"]:::output
+
+    classDef input fill:transparent,stroke:#319795,stroke-width:3px
+    classDef gate fill:transparent,stroke:#38A169,stroke-width:3px
+    classDef context fill:transparent,stroke:#3182CE,stroke-width:3px
+    classDef router fill:transparent,stroke:#2B6CB0,stroke-width:3px
+    classDef agent fill:transparent,stroke:#E53E50,stroke-width:3px
+    classDef escalation fill:transparent,stroke:#C53030,stroke-width:3px
+    classDef output fill:transparent,stroke:#805AD5,stroke-width:3px
+    classDef db fill:transparent,stroke:#3182CE,stroke-width:3px
+    classDef audit fill:transparent,stroke:#DD6B20,stroke-width:3px
 ```
-ProcessBatchAsync(requests, cancellationToken):
-│
-├── 1. Guard: throw ArgumentNullException if requests is null
-│
-├── 2. Initialize:
-│   ├── acceptedOrders = new List<CashOrder>()
-│   ├── rejectedOrders = new List<RejectedOrder>()
-│   ├── auditEntries = new List<AuditTrailEntry>()
-│   └── runningTotals = new Dictionary<(int clientId, string currency), decimal>()
-│
-├── 3. For each request in requests:
-│   │
-│   ├── 3a. Validate amount > 0
-│   │   └── If invalid → add to rejectedOrders, add Warning audit entry
-│   │
-│   ├── 3b. Validate currency is in SupportedCurrencies (case-insensitive)
-│   │   └── If invalid → add to rejectedOrders, add Warning audit entry
-│   │
-│   ├── 3c. Get daily limit:
-│   │   ├── clientLimit = await GetClientDailyLimitAsync(clientId, currency)
-│   │   └── effectiveLimit = clientLimit?.MaxDailyAmount ?? options.DefaultMaxDailyAmount
-│   │
-│   ├── 3d. Get current total (with running total from this batch):
-│   │   ├── If not cached: dbTotal = await GetTotalOrderedTodayAsync(clientId, currency, date)
-│   │   ├── batchTotal = runningTotals.GetValueOrDefault((clientId, currency), 0)
-│   │   └── currentTotal = dbTotal + batchTotal
-│   │
-│   ├── 3e. Check limit:
-│   │   ├── If currentTotal + amount > effectiveLimit → reject, add Warning audit
-│   │   └── If within limit:
-│   │       ├── Create CashOrder (Id=NewGuid, Status=Validated, CreatedAtUtc=UtcNow)
-│   │       ├── Add to acceptedOrders
-│   │       ├── Update runningTotals[(clientId, currency)] += amount
-│   │       └── Add Info audit entry
-│   │
-├── 4. If acceptedOrders.Any():
-│   └── await repository.SaveOrdersAsync(acceptedOrders, ct)
-│
-├── 5. await auditTrailService.RecordAsync(auditEntries, ct)
-│
-└── 6. Return new BatchProcessingResult { AcceptedOrders, RejectedOrders }
-```
+
+---
 
 ## Audit Entry Construction Rules
 
 | Scenario | EntityType | Action | Severity | Details |
 |----------|-----------|--------|----------|---------|
-| Order accepted | "CashOrder" | "OrderAccepted" | Info | Amount, currency, client ID |
-| Rejected: invalid amount | "CashOrder" | "OrderRejected" | Warning | "Invalid amount: {amount}" |
-| Rejected: unsupported currency | "CashOrder" | "OrderRejected" | Warning | "Unsupported currency: {currency}" |
-| Rejected: limit exceeded | "CashOrder" | "OrderRejected" | Warning | "Daily limit exceeded: {current}/{limit} {currency}" |
-| Empty batch processed | "CashOrder" | "EmptyBatchProcessed" | Info | "No orders in batch" |
+| Order accepted | `CashOrder` | `OrderAccepted` | Info | Amount, currency, client ID |
+| Rejected: invalid amount | `CashOrder` | `OrderRejected` | Warning | `Invalid amount: {amount}` |
+| Rejected: unsupported currency | `CashOrder` | `OrderRejected` | Warning | `Unsupported currency: {currency}` |
+| Rejected: limit exceeded | `CashOrder` | `OrderRejected` | Warning | `Daily limit exceeded: {current}/{limit} {currency}` |
+| Empty batch processed | `CashOrder` | `EmptyBatchProcessed` | Info | `No orders in batch` |
