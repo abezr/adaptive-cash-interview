@@ -1,0 +1,26 @@
+## .NET
+bin/
+obj/
+*.user
+*.suo
+*.cache
+*.dll
+*.pdb
+*.exe
+.vs/
+*.nupkg
+
+## Node
+node_modules/
+dist/
+build/
+
+## IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+## OS
+Thumbs.db
+.DS_Store
