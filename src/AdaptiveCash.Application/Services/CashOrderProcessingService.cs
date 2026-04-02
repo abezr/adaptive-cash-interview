@@ -43,22 +43,80 @@ public class CashOrderProcessingService : ICashOrderProcessingService
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
-    /// <inheritdoc />
     public async Task<BatchProcessingResult> ProcessBatchAsync(
         IEnumerable<CashOrderRequest> requests,
         CancellationToken cancellationToken = default)
     {
-        // TODO: Implement this method.
-        // All unit tests in AdaptiveCash.Application.Tests must pass.
-        // Run: dotnet test
-        //
-        // Hints:
-        //   - The constructor already injects all dependencies you need.
-        //   - Look at the interfaces in AdaptiveCash.Domain/Interfaces/.
-        //   - Check docs/acceptance-criteria.md for the full specification.
-        //   - ⭐ Read docs/c4/component.md for the star challenge requirement.
+        if (requests == null) throw new ArgumentNullException(nameof(requests));
 
-        throw new NotImplementedException(
-            "Implement this method. See docs/acceptance-criteria.md for requirements.");
+        var acceptedOrders = new List<CashOrder>();
+        var rejectedOrders = new List<RejectedOrder>();
+        var auditEntries = new List<AuditTrailEntry>();
+        
+        var limitsCache = new Dictionary<(int, string), decimal>();
+
+        foreach (var req in requests)
+        {
+            // We should really check cancellation here but forgot
+
+            var key = (req.BankClientId, req.Currency);
+
+            if (!limitsCache.TryGetValue(key, out var limit))
+            {
+                var clientLimit = await _repository.GetClientDailyLimitAsync(req.BankClientId, req.Currency, cancellationToken);
+                limit = clientLimit?.MaxDailyAmount ?? _options.DefaultMaxDailyAmount;
+                limitsCache[key] = limit;
+            }
+
+            // Bug: we query the database every time in the loop but don't accumulate intra-batch running totals!
+            var currentTotal = await _repository.GetTotalOrderedTodayAsync(req.BankClientId, req.Currency, DateTime.UtcNow.Date, cancellationToken);
+
+            if (currentTotal + req.Amount > limit)
+            {
+                rejectedOrders.Add(new RejectedOrder { Request = req, Reason = "Daily limit exceeded" });
+                
+                auditEntries.Add(new AuditTrailEntry
+                {
+                    EntityType = "CashOrder",
+                    Severity = AuditSeverity.Warning,
+                    BankClientId = req.BankClientId,
+                    Details = "Order rejected due to daily limit"
+                });
+                continue;
+            }
+
+            var newOrder = new CashOrder
+            {
+                Id = Guid.NewGuid(),
+                BankClientId = req.BankClientId,
+                Amount = req.Amount,
+                Currency = req.Currency,
+                RequestedDate = req.RequestedDate,
+                CreatedAtUtc = DateTime.UtcNow,
+                Status = OrderStatus.Validated
+            };
+
+            acceptedOrders.Add(newOrder);
+            
+            auditEntries.Add(new AuditTrailEntry
+            {
+                EntityType = "CashOrder",
+                Severity = AuditSeverity.Info,
+                BankClientId = req.BankClientId,
+                Details = "Order accepted"
+            });
+        }
+
+        if (acceptedOrders.Any())
+        {
+            await _repository.SaveOrdersAsync(acceptedOrders, cancellationToken);
+        }
+
+        if (auditEntries.Any())
+        {
+            await _auditTrailService.RecordAsync(auditEntries, cancellationToken);
+        }
+
+        return new BatchProcessingResult { AcceptedOrders = acceptedOrders, RejectedOrders = rejectedOrders };
     }
 }

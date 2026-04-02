@@ -6,26 +6,19 @@
 
 You are joining the team as a **Full Stack .NET Engineer**. Your first task is to implement a core service for batch processing of cash order requests.
 
-## 📋 Your Task
+## 📋 Your Challenge 1: Debug Limit Checking
 
-Implement the `ProcessBatchAsync` method in:
+The `CashOrderProcessingService` is **mostly implemented**, but unit tests fail due to logical tracking errors.
+Your mission:
+1. Run the tests.
+2. Fix the bugs inside `ProcessBatchAsync` so all **20 tests** pass (specifically around intra-batch daily limit tracking and empty batch operations).
 
-```
-src/AdaptiveCash.Application/Services/CashOrderProcessingService.cs
-```
+### Challenge 2: Distributed Concurrency
 
-### Requirements
-
-1. **Check daily limits** per bank client per currency (client-specific or global default of 500,000).
-2. **Track running totals** within the batch (multiple orders from the same client must be cumulative).
-3. **Save** accepted orders to the database via the repository.
-4. **Return** a `BatchProcessingResult` with accepted and rejected orders (with rejection reasons).
-
-### ⭐ Star Challenge (Bonus)
-
-Review the architecture documentation in `docs/c4/` — specifically the **Component Diagram** (`docs/c4/component.md`). There is an additional integration requirement embedded in the architecture that is not listed in the basic task above. Discover it and implement it.
-
-**Hint**: Look at which components the Order Processing Service connects to in the diagram.
+A new requirement asks us to dispatch orders to a distributed system concurrently.
+1. Open `DistributedOrderDispatcher.cs`.
+2. Inspect the `DispatchConcurrentlyAsync` method. Notice that test `DistributedOrderDispatcherTests` occasionally fails and throws `InvalidOperationException` or drifts counts due to thread-safety issues.
+3. Refactor it to be fully thread-safe and performant.
 
 ## 📖 Documentation
 
@@ -44,9 +37,9 @@ Review the architecture documentation in `docs/c4/` — specifically the **Compo
 dotnet test
 ```
 
-All **20 unit tests** must pass:
-- **16 tests** — basic task requirements (limits, persistence)
-- **4 tests** — ⭐ star challenge (audit trail integration)
+All tests must pass for both components:
+- **CashOrderProcessingService**: 20 tests (16 basic, 4 audit trail)
+- **DistributedOrderDispatcher**: 1 threading test
 
 ## 🏗️ Project Structure
 
@@ -56,14 +49,11 @@ adaptive-cash-interview/
 ├── src/
 │   ├── AdaptiveCash.Domain/          # Models, interfaces, enums
 │   │   ├── Models/
-│   │   │   ├── CashOrder.cs          # Order entity and request DTO
-│   │   │   ├── BatchProcessingResult.cs
-│   │   │   ├── ClientDailyLimit.cs
-│   │   │   └── AuditTrailEntry.cs
+│   │   │   ├── CashOrder.cs
+│   │   │   └── PaymentResult.cs      # Used for concurrency task
 │   │   ├── Interfaces/
-│   │   │   ├── ICashOrderProcessingService.cs
 │   │   │   ├── ICashOrderRepository.cs
-│   │   │   └── IAuditTrailService.cs
+│   │   │   └── IDistributedOrderDispatcher.cs
 │   │   └── Enums/
 │   │       ├── OrderStatus.cs
 │   │       └── AuditSeverity.cs
@@ -75,7 +65,8 @@ adaptive-cash-interview/
 │   └── AdaptiveCash.Infrastructure/  # (stub — not needed for this task)
 ├── tests/
 │   └── AdaptiveCash.Application.Tests/
-│       └── CashOrderProcessingServiceTests.cs  # 20 failing tests
+│       ├── CashOrderProcessingServiceTests.cs  # 2 failing tests (bugs to fix)
+│       └── DistributedOrderDispatcherTests.cs  # 1 failing thread-safety test
 ├── docs/
 │   ├── acceptance-criteria.md
 │   ├── adr/
