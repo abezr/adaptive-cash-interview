@@ -20,7 +20,7 @@ Running `dotnet test` currently reveals **5 failing tests**. You must refactor `
 2. **The Limit Race Condition**: The daily limits are processed inside a concurrent `Task.WhenAll` loop, meaning intra-batch limits are completely missed when duplicate queries read the same baseline from the database simultaneously.
 3. **Thread-Safety**: Generic `List<T>` elements are being mutated inside a concurrent parallel loop, throwing thread-safety exceptions or corrupting array counts and breaking audit trails.
 
-Find elegant, enterprise-ready solutions to these constraints so that exactly **22 tests pass** under load!
+Find elegant, enterprise-ready solutions to these constraints so that exactly **7 tests pass** under load!
 
 ## 📖 Documentation
 
@@ -40,7 +40,7 @@ dotnet test
 ```
 
 All tests must pass for the component:
-- **CashOrderProcessingService**: 22 tests (17 basic logic, 2 concurrency/load, 3 audit trail)
+- **CashOrderProcessingService**: 7 tests (2 passing examples, 5 failing scenarios)
 
 ## 🏗️ Project Structure
 
