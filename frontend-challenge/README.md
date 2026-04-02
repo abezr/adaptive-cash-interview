@@ -52,10 +52,10 @@ Live-updating list of the latest orders with:
 
 ## 🎨 Design Reference
 
-See the mockup images in the `mockups/` directory:
+See the schematic wireframe sketches in the `mockups/` directory:
 
-- `mockups/dashboard_main.png` — Main dashboard layout with KPIs, charts, and data table
-- `mockups/dashboard_dataflow.png` — System architecture and data flow monitoring view
+- `mockups/dashboard_main.png` — Schematic blueprint of the main layout, KPIs, charts, and table.
+- `mockups/dashboard_dataflow.png` — Schematic blueprint of the system architecture and data flow.
 
 ### Design Guidelines
 - **Dark mode** with navy background (#0f172a)
