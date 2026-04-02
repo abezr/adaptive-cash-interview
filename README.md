@@ -6,18 +6,27 @@
 
 You are joining the team as a **Full Stack .NET Engineer**. Your first task is to implement a core service for batch processing of cash order requests.
 
-## 📋 Your Challenge 1: Debug Limit Checking
+## 📋 Challenge 1: Debug Limit Checking
 
 The `CashOrderProcessingService` is **mostly implemented**, but unit tests fail due to logical tracking errors.
-Your mission:
+
+**Target File**: [`CashOrderProcessingService.cs`](src/AdaptiveCash.Application/Services/CashOrderProcessingService.cs)  
+**Test File**: [`CashOrderProcessingServiceTests.cs`](tests/AdaptiveCash.Application.Tests/CashOrderProcessingServiceTests.cs)
+
+**Your mission**:
 1. Run the tests.
 2. Fix the bugs inside `ProcessBatchAsync` so all **20 tests** pass (specifically around intra-batch daily limit tracking and empty batch operations).
 
-### Challenge 2: Distributed Concurrency
+## 🚀 Challenge 2: Distributed Concurrency
 
 A new requirement asks us to dispatch orders to a distributed system concurrently.
-1. Open `DistributedOrderDispatcher.cs`.
-2. Inspect the `DispatchConcurrentlyAsync` method. Notice that test `DistributedOrderDispatcherTests` occasionally fails and throws `InvalidOperationException` or drifts counts due to thread-safety issues.
+
+**Target File**: [`DistributedOrderDispatcher.cs`](src/AdaptiveCash.Application/Services/DistributedOrderDispatcher.cs)  
+**Test File**: [`DistributedOrderDispatcherTests.cs`](tests/AdaptiveCash.Application.Tests/DistributedOrderDispatcherTests.cs)
+
+**Your mission**:
+1. Inspect the `DispatchConcurrentlyAsync` method. 
+2. Notice that test `DistributedOrderDispatcherTests` occasionally fails and throws `InvalidOperationException` or drifts counts due to thread-safety issues.
 3. Refactor it to be fully thread-safe and performant.
 
 ## 📖 Documentation
