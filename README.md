@@ -45,9 +45,9 @@ Review the architecture documentation in `docs/c4/` — specifically the **Compo
 dotnet test
 ```
 
-All **22 unit tests** must pass:
-- **18 tests** — basic task requirements
-- **4 tests** — ⭐ star challenge (audit trail integration)
+All **28 unit tests** must pass:
+- **22 tests** — basic task requirements (validation, limits, persistence)
+- **6 tests** — ⭐ star challenge (audit trail integration)
 
 ## 🏗️ Project Structure
 
@@ -76,7 +76,7 @@ adaptive-cash-interview/
 │   └── AdaptiveCash.Infrastructure/  # (stub — not needed for this task)
 ├── tests/
 │   └── AdaptiveCash.Application.Tests/
-│       └── CashOrderProcessingServiceTests.cs  # 22 failing tests
+│       └── CashOrderProcessingServiceTests.cs  # 28 failing tests
 ├── docs/
 │   ├── acceptance-criteria.md
 │   ├── adr/
@@ -102,8 +102,8 @@ If time permits, you may spend remaining time on the frontend challenge describe
 
 ## 🛠️ Tech Stack
 
-- .NET 8
-- C# 12
+- .NET 10
+- C# 13
 - xUnit + Moq + FluentAssertions (tests)
 - No database needed — all dependencies are mocked in tests
 

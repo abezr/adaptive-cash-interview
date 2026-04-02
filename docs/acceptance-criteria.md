@@ -153,14 +153,15 @@ Run: `dotnet test`
 
 | Test Category | Test Count | Tests |
 |---------------|-----------|-------|
-| Basic Validation | 5 | Empty batch, valid order, zero/negative amount, unsupported currency, case insensitivity |
+| Basic Validation | 9 | Empty batch, valid order, zero/negative amount (×3), unsupported currency (×4), case insensitivity |
 | Daily Limits | 5 | Exceeded, at limit, below limit, client-specific, default fallback |
 | Mixed Batches | 3 | Mixed valid/invalid, running total, per-currency independence |
 | Persistence | 3 | Save accepted, no save for rejected, correct properties |
 | ⭐ Audit Trail | 4 | Accepted audit, rejected audit, client context, empty batch |
-| Edge Cases | 2 | Null input, cancellation |
-| **Total** | **22** | |
+| Edge Cases | 4 | Null input, cancellation, large valid amount, boundary ★ |
+| **Total** | **28** | |
 
-All 22 tests must pass for a complete implementation.
-The first 18 tests (non-star) cover the basic task requirements.
-The last 4 tests cover the star challenge (audit trail integration).
+All 28 tests must pass for a complete implementation.
+The first 22 tests (non-star) cover the basic task requirements.
+The last 6 tests cover the star challenge (audit trail integration).
+
