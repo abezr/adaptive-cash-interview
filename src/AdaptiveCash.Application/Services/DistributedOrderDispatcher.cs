@@ -1,5 +1,6 @@
 using AdaptiveCash.Domain.Interfaces;
 using AdaptiveCash.Domain.Models;
+using System.Collections.Concurrent;
 
 namespace AdaptiveCash.Application.Services;
 
@@ -16,32 +17,29 @@ public class DistributedOrderDispatcher : IDistributedOrderDispatcher
         IEnumerable<CashOrder> orders, 
         CancellationToken cancellationToken = default)
     {
-        // BUG: These state variables are not thread-safe 
-        // when accessed from parallel concurrent tasks!
-        var completedPayments = new List<PaymentResult>(); 
-        int successfulCount = 0; 
+        // Bug: ConcurrentDictionary protects the keys, but the Values are non-thread-safe Lists!
+        var groupedResults = new ConcurrentDictionary<int, List<PaymentResult>>();
+        int successfulCount = 0;
 
         var tasks = orders.Select(async order =>
         {
             var result = await _gateway.ProcessPaymentAsync(order, cancellationToken);
             
-            // Race condition: concurrent adds will lose data or throw exceptions
-            completedPayments.Add(result); 
-            
+            // Add to dictionary. 
+            // RACE CONDITION: Multiple threads resolving the same List<PaymentResult> 
+            // will call .Add() simultaneously, throwing exceptions or losing data.
+            var clientList = groupedResults.GetOrAdd(order.BankClientId, _ => new List<PaymentResult>());
+            clientList.Add(result); 
+
             if (result.IsSuccess)
             {
-                // Race condition: concurrent increments will clobber each other
-                successfulCount++; 
+                Interlocked.Increment(ref successfulCount);
             }
         });
 
-        // Wait for all concurrent network calls to finish
         await Task.WhenAll(tasks);
 
-        return new DispatchResult 
-        { 
-            SuccessfulCount = successfulCount, 
-            CompletedPayments = completedPayments 
-        };
+        var allPayments = groupedResults.Values.SelectMany(v => v).ToList();
+        return new DispatchResult { SuccessfulCount = successfulCount, CompletedPayments = allPayments };
     }
 }
