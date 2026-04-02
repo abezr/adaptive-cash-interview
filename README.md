@@ -6,28 +6,21 @@
 
 You are joining the team as a **Full Stack .NET Engineer**. Your first task is to implement a core service for batch processing of cash order requests.
 
-## 📋 Challenge 1: Debug Limit Checking
+## 📋 The Unified Challenge: Performance & Concurrency
 
-The `CashOrderProcessingService` is **mostly implemented**, but unit tests fail due to logical tracking errors.
+The `CashOrderProcessingService` processes incoming cash orders but occasionally runs into massive batches spanning thousands of orders. The current stub is deeply flawed.
 
 **Target File**: [`CashOrderProcessingService.cs`](src/AdaptiveCash.Application/Services/CashOrderProcessingService.cs)  
 **Test File**: [`CashOrderProcessingServiceTests.cs`](tests/AdaptiveCash.Application.Tests/CashOrderProcessingServiceTests.cs)
 
 **Your mission**:
-1. Run the tests.
-2. Fix the bugs inside `ProcessBatchAsync` so all **20 tests** pass (specifically around intra-batch daily limit tracking and empty batch operations).
+Running `dotnet test` currently reveals **5 failing tests**. You must refactor `ProcessBatchAsync` to resolve them by tackling three distinct computer science problems:
 
-## 🚀 Challenge 2: Distributed Concurrency
+1. **The CPU Time-out (Algorithmic Complexity)**: The Phase 1 "Annihilation" logic uses an $O(N^2)$ algorithm to find offsetting amounts within the batch. For a batch of 50,000 orders, it freezes the entire CPU. Use optimal data structures (like HashMaps/Dictionaries or Two-Pointers) to reduce this to $O(N)$.
+2. **The Limit Race Condition**: The daily limits are processed inside a concurrent `Task.WhenAll` loop, meaning intra-batch limits are completely missed when duplicate queries read the same baseline from the database simultaneously.
+3. **Thread-Safety**: Generic `List<T>` elements are being mutated inside a concurrent parallel loop, throwing thread-safety exceptions or corrupting array counts and breaking audit trails.
 
-A new requirement asks us to dispatch orders to a distributed system concurrently.
-
-**Target File**: [`DistributedOrderDispatcher.cs`](src/AdaptiveCash.Application/Services/DistributedOrderDispatcher.cs)  
-**Test File**: [`DistributedOrderDispatcherTests.cs`](tests/AdaptiveCash.Application.Tests/DistributedOrderDispatcherTests.cs)
-
-**Your mission**:
-1. Inspect the `DispatchConcurrentlyAsync` method. 
-2. Notice that test `DistributedOrderDispatcherTests` occasionally fails and throws `InvalidOperationException` or drifts counts due to thread-safety issues.
-3. Refactor it to be fully thread-safe and performant.
+Find elegant, enterprise-ready solutions to these constraints so that exactly **22 tests pass** under load!
 
 ## 📖 Documentation
 
@@ -46,9 +39,8 @@ A new requirement asks us to dispatch orders to a distributed system concurrentl
 dotnet test
 ```
 
-All tests must pass for both components:
-- **CashOrderProcessingService**: 20 tests (16 basic, 4 audit trail)
-- **DistributedOrderDispatcher**: 1 threading test
+All tests must pass for the component:
+- **CashOrderProcessingService**: 22 tests (17 basic logic, 2 concurrency/load, 3 audit trail)
 
 ## 🏗️ Project Structure
 
@@ -59,10 +51,11 @@ adaptive-cash-interview/
 │   ├── AdaptiveCash.Domain/          # Models, interfaces, enums
 │   │   ├── Models/
 │   │   │   ├── CashOrder.cs
-│   │   │   └── PaymentResult.cs      # Used for concurrency task
+│   │   │   └── PaymentResult.cs
 │   │   ├── Interfaces/
 │   │   │   ├── ICashOrderRepository.cs
-│   │   │   └── IDistributedOrderDispatcher.cs
+│   │   │   ├── IExternalPaymentGateway.cs
+│   │   │   └── ICashOrderProcessingService.cs
 │   │   └── Enums/
 │   │       ├── OrderStatus.cs
 │   │       └── AuditSeverity.cs
@@ -74,8 +67,7 @@ adaptive-cash-interview/
 │   └── AdaptiveCash.Infrastructure/  # (stub — not needed for this task)
 ├── tests/
 │   └── AdaptiveCash.Application.Tests/
-│       ├── CashOrderProcessingServiceTests.cs  # 2 failing tests (bugs to fix)
-│       └── DistributedOrderDispatcherTests.cs  # 1 failing thread-safety test
+│       └── CashOrderProcessingServiceTests.cs  # All tests in one file (5 failing)
 ├── docs/
 │   ├── acceptance-criteria.md
 │   ├── adr/

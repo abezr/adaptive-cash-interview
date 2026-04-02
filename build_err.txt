@@ -1,0 +1,12 @@
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+  AdaptiveCash.Domain -> C:\Candidates\dotnet\Dmitrii\adaptive-cash-interview\src\AdaptiveCash.Domain\bin\Debug\net10.0\AdaptiveCash.Domain.dll
+  AdaptiveCash.Application -> C:\Candidates\dotnet\Dmitrii\adaptive-cash-interview\src\AdaptiveCash.Application\bin\Debug\net10.0\AdaptiveCash.Application.dll
+  AdaptiveCash.Infrastructure -> C:\Candidates\dotnet\Dmitrii\adaptive-cash-interview\src\AdaptiveCash.Infrastructure\bin\Debug\net10.0\AdaptiveCash.Infrastructure.dll
+  AdaptiveCash.Application.Tests -> C:\Candidates\dotnet\Dmitrii\adaptive-cash-interview\tests\AdaptiveCash.Application.Tests\bin\Debug\net10.0\AdaptiveCash.Application.Tests.dll
+
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:00.73

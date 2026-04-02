@@ -21,6 +21,7 @@ public class CashOrderProcessingServiceTests
 {
     private readonly Mock<ICashOrderRepository> _repositoryMock;
     private readonly Mock<IAuditTrailService> _auditTrailServiceMock;
+    private readonly Mock<IExternalPaymentGateway> _gatewayMock;
     private readonly Mock<ILogger<CashOrderProcessingService>> _loggerMock;
     private readonly CashOrderProcessingOptions _options;
     private readonly CashOrderProcessingService _sut;
@@ -29,6 +30,10 @@ public class CashOrderProcessingServiceTests
     {
         _repositoryMock = new Mock<ICashOrderRepository>();
         _auditTrailServiceMock = new Mock<IAuditTrailService>();
+        _gatewayMock = new Mock<IExternalPaymentGateway>();
+        _gatewayMock.Setup(g => g.ProcessPaymentAsync(It.IsAny<CashOrderRequest>(), It.IsAny<CancellationToken>()))
+                    .ReturnsAsync(new PaymentResult { IsSuccess = true });
+        
         _loggerMock = new Mock<ILogger<CashOrderProcessingService>>();
         _options = new CashOrderProcessingOptions
         {
@@ -42,6 +47,7 @@ public class CashOrderProcessingServiceTests
         _sut = new CashOrderProcessingService(
             _repositoryMock.Object,
             _auditTrailServiceMock.Object,
+            _gatewayMock.Object,
             _options,
             _loggerMock.Object);
     }
@@ -627,5 +633,70 @@ public class CashOrderProcessingServiceTests
 
         // Assert
         result.AcceptedOrders.Should().HaveCount(1);
+    }
+
+    // ========================================================================
+    // ADVANCED CONCURRENCY & ALGORITHM TESTS
+    // ========================================================================
+
+    [Fact]
+    public async Task ProcessBatchAsync_WithLargeBatchOfPairs_AnnihilatesEfficientlyWithinTimeLimit()
+    {
+        // Arrange
+        // Generate an extremely large batch where 99% are +100 and -100 pairs from the same client
+        int pairCount = 30_000;
+        var requests = new List<CashOrderRequest>(pairCount * 2);
+        
+        for (int i = 0; i < pairCount; i++)
+        {
+            requests.Add(new CashOrderRequest { BankClientId = 1, Currency = "USD", Amount = 100 });
+        }
+        for (int i = 0; i < pairCount; i++)
+        {
+            requests.Add(new CashOrderRequest { BankClientId = 1, Currency = "USD", Amount = -100 });
+        }
+        // Shuffle or leave ordered. The O(N^2) bug will timeout here regardless.
+
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        
+        // Act
+        var result = await _sut.ProcessBatchAsync(requests);
+        
+        sw.Stop();
+
+        // Assert
+        result.AcceptedOrders.Should().BeEmpty("All + and - orders should have naturally annihilated each other locally");
+        
+        // Fail if it took longer than 1.5 seconds (naive O(N^2) takes ~5+ seconds, optimal O(N) takes <0.1 sec)
+        sw.ElapsedMilliseconds.Should().BeLessThan(1500, "Algorithm should process annihilation optimally (e.g. O(N) using HashMap/TwoPointers), not O(N^2).");
+    }
+
+    [Fact]
+    public async Task ProcessBatchAsync_WithHighConcurrency_MaintainsThreadSafetyOnCollections()
+    {
+        // Arrange
+        // We inject simulated network latency so the tasks run heavily concurrent inside WhenAll
+        _gatewayMock.Setup(g => g.ProcessPaymentAsync(It.IsAny<CashOrderRequest>(), It.IsAny<CancellationToken>()))
+                    .Returns(async () => 
+                    {
+                        await Task.Delay(2);
+                        return new PaymentResult { IsSuccess = true };
+                    });
+
+        int orderCount = 5_000;
+        var requests = Enumerable.Range(1, orderCount).Select(i => new CashOrderRequest 
+        { 
+            BankClientId = i, // Spreading across clients avoids DB limit race conditions
+            Currency = "USD", 
+            Amount = 100 
+        }).ToList();
+
+        // Act
+        var result = await _sut.ProcessBatchAsync(requests);
+
+        // Assert
+        // A thread-unsafe List will throw an exception during WhenAll, or lose items if lucky.
+        // If they use ConcurrentBag or lock(), it will exactly match 5000.
+        result.AcceptedOrders.Should().HaveCount(orderCount, "Thread unsafe collections drop elements under heavy concurrency.");
     }
 }
