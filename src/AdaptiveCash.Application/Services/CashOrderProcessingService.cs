@@ -1,3 +1,4 @@
+using AdaptiveCash.Domain.Enums;
 using AdaptiveCash.Application.Configuration;
 using AdaptiveCash.Domain.Interfaces;
 using AdaptiveCash.Domain.Models;
@@ -51,6 +52,13 @@ public class CashOrderProcessingService : ICashOrderProcessingService
         // TODO: Implement this method.
         // All unit tests in AdaptiveCash.Application.Tests must pass.
         // Run: dotnet test
+        //
+        // Hints:
+        //   - The constructor already injects all dependencies you need.
+        //   - Look at the interfaces in AdaptiveCash.Domain/Interfaces/.
+        //   - Check docs/acceptance-criteria.md for the full specification.
+        //   - ⭐ Read docs/c4/component.md for the star challenge requirement.
+
         throw new NotImplementedException(
             "Implement this method. See docs/acceptance-criteria.md for requirements.");
     }
