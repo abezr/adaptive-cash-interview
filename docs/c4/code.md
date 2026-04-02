@@ -16,18 +16,12 @@ config:
   look: handDrawn
 ---
 flowchart TD
-    subgraph service ["CashOrderProcessingService"]
-        direction TB
-        SVC["⚙️ ProcessBatchAsync\nCore orchestration method"]:::router
-    end
+    SVC["⚙️ CashOrderProcessingService"]:::router
 
-    SVC -- "Validates orders,\nchecks limits,\nsaves accepted" --> REPO["💾 ICashOrderRepository\nGetTotalOrderedTodayAsync\nGetClientDailyLimitAsync\nSaveOrdersAsync"]:::db
-
-    SVC -- "Records EVERY\nprocessing decision" --> AUDIT["📋 IAuditTrailService\nRecordAsync"]:::audit
-
-    SVC -- "Reads supported currencies\nand default daily limit" --> OPTS["📝 CashOrderProcessingOptions\nDefaultMaxDailyAmount\nSupportedCurrencies"]:::context
-
-    SVC -- "Structured logging" --> LOG["📊 ILogger"]:::context
+    SVC --> REPO["💾 ICashOrderRepository"]:::db
+    SVC --> AUDIT["📋 IAuditTrailService"]:::audit
+    SVC --> OPTS["📝 CashOrderProcessingOptions"]:::context
+    SVC --> LOG["📊 ILogger"]:::context
 
     classDef router fill:transparent,stroke:#2B6CB0,stroke-width:3px
     classDef db fill:transparent,stroke:#3182CE,stroke-width:3px
@@ -35,50 +29,42 @@ flowchart TD
     classDef context fill:transparent,stroke:#805AD5,stroke-width:3px
 ```
 
+### ICashOrderRepository
+- `GetTotalOrderedTodayAsync` — sum of all confirmed amounts for a client + currency on a given day
+- `GetClientDailyLimitAsync` — per-client limit override, or null for default
+- `SaveOrdersAsync` — persist accepted orders
+
+### IAuditTrailService
+- `RecordAsync` — persist audit entries for **every** processing decision (regulatory requirement)
+
+### CashOrderProcessingOptions
+- `DefaultMaxDailyAmount` — fallback daily limit (500,000)
+- `SupportedCurrencies` — allowed currency codes (USD, EUR, UAH, etc.)
+
 ---
 
-## Domain Model Relationships
+## Domain Model
 
 ```mermaid
 ---
 config:
   look: handDrawn
 ---
-flowchart LR
-    subgraph input ["Input"]
-        REQ["📥 CashOrderRequest\nBankClientId · Amount\nCurrency · RequestedDate"]:::input
-    end
+flowchart TD
+    REQ["📥 CashOrderRequest"]:::input
+    SVC["⚙️ ProcessBatchAsync"]:::router
+    RESULT["📦 BatchProcessingResult"]:::output
+    ORDER["✅ CashOrder"]:::gate
+    REJORD["❌ RejectedOrder"]:::escalation
+    ENTRY["📋 AuditTrailEntry"]:::audit
+    LIMIT["📊 ClientDailyLimit"]:::context
 
-    subgraph processing ["Processing"]
-        direction TB
-        SVC["⚙️ ProcessBatchAsync"]:::router
-        LIMIT["📊 ClientDailyLimit\nBankClientId · Currency\nMaxDailyAmount"]:::gate
-    end
-
-    subgraph output ["Output"]
-        direction TB
-        RESULT["📦 BatchProcessingResult\nAcceptedOrders · RejectedOrders\nTotalCount · AcceptedCount"]:::output
-
-        subgraph accepted ["Accepted"]
-            ORDER["✅ CashOrder\nId · BankClientId · Amount\nCurrency · RequestedDate\nStatus = Validated\nCreatedAtUtc"]:::gate
-        end
-
-        subgraph rejected ["Rejected"]
-            REJORD["❌ RejectedOrder\nRequest · Reason"]:::escalation
-        end
-    end
-
-    subgraph audit ["Audit"]
-        ENTRY["📋 AuditTrailEntry\nId · EntityType · EntityId\nAction · Severity\nDetails · TimestampUtc\nBankClientId"]:::audit
-    end
-
-    REQ -- "Processed by" --> SVC
-    LIMIT -. "Configures limits for" .-> SVC
-    SVC -- "Produces" --> RESULT
+    REQ --> SVC
+    LIMIT -. "configures" .-> SVC
+    SVC --> RESULT
     RESULT --> ORDER
     RESULT --> REJORD
-    REJORD -. "Wraps original" .-> REQ
-    SVC -- "Emits for each\norder processed" --> ENTRY
+    SVC --> ENTRY
 
     classDef input fill:transparent,stroke:#319795,stroke-width:3px
     classDef router fill:transparent,stroke:#2B6CB0,stroke-width:3px
@@ -86,7 +72,45 @@ flowchart LR
     classDef output fill:transparent,stroke:#805AD5,stroke-width:3px
     classDef escalation fill:transparent,stroke:#C53030,stroke-width:3px
     classDef audit fill:transparent,stroke:#DD6B20,stroke-width:3px
+    classDef context fill:transparent,stroke:#3182CE,stroke-width:3px
 ```
+
+### CashOrderRequest (input)
+| Property | Type | Description |
+|----------|------|-------------|
+| BankClientId | int | Identifies the bank client |
+| Amount | decimal | Requested cash amount |
+| Currency | string | ISO currency code |
+| RequestedDate | DateTime | When cash is needed |
+
+### CashOrder (accepted output)
+| Property | Type | Description |
+|----------|------|-------------|
+| Id | Guid | Unique order identifier |
+| Status | OrderStatus | Set to `Validated` on acceptance |
+| CreatedAtUtc | DateTime | Timestamp of processing |
+| RejectionReason | string? | Null for accepted orders |
+
+### RejectedOrder
+| Property | Type | Description |
+|----------|------|-------------|
+| Request | CashOrderRequest | Original request |
+| Reason | string | Human-readable rejection reason |
+
+### AuditTrailEntry
+| Property | Type | Description |
+|----------|------|-------------|
+| EntityType | string | Always `"CashOrder"` |
+| Severity | AuditSeverity | `Info` for accepted, `Warning` for rejected |
+| BankClientId | int? | For multi-tenant isolation |
+| Details | string? | Context about the decision |
+
+### ClientDailyLimit
+| Property | Type | Description |
+|----------|------|-------------|
+| BankClientId | int | Client this limit applies to |
+| Currency | string | Currency the limit covers |
+| MaxDailyAmount | decimal | Maximum daily amount |
 
 ---
 
@@ -98,53 +122,46 @@ config:
   look: handDrawn
 ---
 flowchart TD
-    START["📥 ProcessBatchAsync\n(requests, cancellationToken)"]:::input
-    GUARD["🛡️ Guard: throw\nArgumentNullException\nif requests is null"]:::gate
-    INIT["📝 Initialize:\nacceptedOrders, rejectedOrders,\nauditEntries, runningTotals"]:::context
+    START["📥 ProcessBatchAsync"]:::input
+    GUARD["🛡️ Null guard"]:::gate
+    INIT["📝 Init collections"]:::context
 
     START --> GUARD --> INIT --> LOOP
 
-    LOOP{"🔄 For each\nrequest in batch"}:::router
+    LOOP{"🔄 Next request"}:::router
 
-    VAMT["✅ Validate:\namount > 0 ?"]:::agent
+    VAMT["✅ Amount > 0 ?"]:::agent
     LOOP --> VAMT
 
-    VAMT -- "❌ Invalid" --> REJ_AMT["Reject:\nInvalid amount\nSeverity: Warning"]:::escalation
-    VAMT -- "✅ Valid" --> VCUR
+    VAMT -- "no" --> REJ_AMT["❌ Reject: invalid amount"]:::escalation
+    VAMT -- "yes" --> VCUR
 
-    VCUR["✅ Validate:\ncurrency in\nSupportedCurrencies ?"]:::agent
-    VCUR -- "❌ Invalid" --> REJ_CUR["Reject:\nUnsupported currency\nSeverity: Warning"]:::escalation
-    VCUR -- "✅ Valid" --> GET_LIMIT
+    VCUR["✅ Currency supported ?"]:::agent
+    VCUR -- "no" --> REJ_CUR["❌ Reject: bad currency"]:::escalation
+    VCUR -- "yes" --> GET_LIMIT
 
-    GET_LIMIT["📊 Get effective limit:\nclientLimit = GetClientDailyLimitAsync\neffective = clientLimit ?? default"]:::context
-
+    GET_LIMIT["📊 Get effective limit"]:::context
     GET_LIMIT --> GET_TOTAL
+    GET_TOTAL["📊 Get running total"]:::context
+    GET_TOTAL --> CHECK
 
-    GET_TOTAL["📊 Get current total:\ndbTotal = GetTotalOrderedTodayAsync\nbatchTotal = runningTotals\ncurrent = dbTotal + batchTotal"]:::context
+    CHECK{"Within limit ?"}:::gate
+    CHECK -- "no" --> REJ_LIM["❌ Reject: limit exceeded"]:::escalation
+    CHECK -- "yes" --> ACCEPT["✅ Accept order"]:::output
 
-    GET_TOTAL --> CHECK_LIMIT
-
-    CHECK_LIMIT{"current + amount\n≤ effective limit ?"}:::gate
-    CHECK_LIMIT -- "❌ Exceeded" --> REJ_LIMIT["Reject:\nDaily limit exceeded\nSeverity: Warning"]:::escalation
-    CHECK_LIMIT -- "✅ Within limit" --> ACCEPT
-
-    ACCEPT["✅ Accept:\nCreate CashOrder (new Guid)\nStatus = Validated\nCreatedAtUtc = UtcNow\nUpdate runningTotals\nSeverity: Info"]:::output
-
-    REJ_AMT --> NEXT["➡️ Next\nrequest"]:::router
+    REJ_AMT --> NEXT["➡️ Continue"]:::router
     REJ_CUR --> NEXT
-    REJ_LIMIT --> NEXT
+    REJ_LIM --> NEXT
     ACCEPT --> NEXT
     NEXT --> LOOP
 
-    LOOP -- "✅ All done" --> SAVE
-
-    SAVE{"Any accepted\norders?"}:::gate
-    SAVE -- "Yes" --> PERSIST["💾 SaveOrdersAsync\n(acceptedOrders)"]:::db
-    SAVE -- "No" --> AUDIT_STEP
-    PERSIST --> AUDIT_STEP
-
-    AUDIT_STEP["📋 RecordAsync\n(all audit entries)"]:::audit
-    AUDIT_STEP --> RETURN["📦 Return\nBatchProcessingResult"]:::output
+    LOOP -- "done" --> SAVE
+    SAVE{"Accepted any ?"}:::gate
+    SAVE -- "yes" --> PERSIST["💾 SaveOrdersAsync"]:::db
+    SAVE -- "no" --> AUDIT
+    PERSIST --> AUDIT
+    AUDIT["📋 RecordAsync"]:::audit
+    AUDIT --> RET["📦 Return result"]:::output
 
     classDef input fill:transparent,stroke:#319795,stroke-width:3px
     classDef gate fill:transparent,stroke:#38A169,stroke-width:3px
@@ -157,37 +174,52 @@ flowchart TD
     classDef audit fill:transparent,stroke:#DD6B20,stroke-width:3px
 ```
 
+### Step-by-step
+
+1. **Guard** — throw `ArgumentNullException` if requests is null
+2. **Initialize** — empty lists for accepted, rejected, audit entries; dictionary for running totals
+3. **For each request:**
+   - Validate amount > 0; reject with `Warning` audit if invalid
+   - Validate currency is in `SupportedCurrencies` (case-insensitive); reject with `Warning` if not
+   - Get effective limit: `GetClientDailyLimitAsync()` → fallback to `DefaultMaxDailyAmount`
+   - Get running total: `GetTotalOrderedTodayAsync()` + batch running total for same (clientId, currency)
+   - If `currentTotal + amount > limit` → reject with `Warning` audit
+   - Otherwise → create `CashOrder` with `Status = Validated`, `CreatedAtUtc = UtcNow`, update running total, add `Info` audit
+4. **Persist** — `SaveOrdersAsync` only if at least one order accepted
+5. **Audit** — `RecordAsync` always called (even for empty batches)
+6. **Return** — `BatchProcessingResult` with accepted and rejected lists
+
 ---
 
-## Audit Entry Construction Rules
+## Audit Entry Rules
 
-| Scenario | EntityType | Action | Severity | Details |
-|----------|-----------|--------|----------|---------|
-| Order accepted | `CashOrder` | `OrderAccepted` | Info | Amount, currency, client ID |
-| Rejected: invalid amount | `CashOrder` | `OrderRejected` | Warning | `Invalid amount: {amount}` |
-| Rejected: unsupported currency | `CashOrder` | `OrderRejected` | Warning | `Unsupported currency: {currency}` |
-| Rejected: limit exceeded | `CashOrder` | `OrderRejected` | Warning | `Daily limit exceeded: {current}/{limit} {currency}` |
-| Empty batch processed | `CashOrder` | `EmptyBatchProcessed` | Info | `No orders in batch` |
+| Scenario | Action | Severity |
+|----------|--------|----------|
+| Order accepted | `OrderAccepted` | Info |
+| Invalid amount | `OrderRejected` | Warning |
+| Unsupported currency | `OrderRejected` | Warning |
+| Limit exceeded | `OrderRejected` | Warning |
+| Empty batch | `EmptyBatchProcessed` | Info |
 
 ---
 
 ## Interface Contracts
 
-### ICashOrderProcessingService
 ```csharp
+// Core service — YOUR IMPLEMENTATION
 Task<BatchProcessingResult> ProcessBatchAsync(
     IEnumerable<CashOrderRequest> requests,
     CancellationToken cancellationToken = default);
 ```
 
-### ICashOrderRepository
 ```csharp
+// Repository — mocked in tests
 Task<decimal> GetTotalOrderedTodayAsync(int bankClientId, string currency, DateTime date, CancellationToken ct);
 Task SaveOrdersAsync(IEnumerable<CashOrder> orders, CancellationToken ct);
 Task<ClientDailyLimit?> GetClientDailyLimitAsync(int bankClientId, string currency, CancellationToken ct);
 ```
 
-### IAuditTrailService
 ```csharp
+// Audit trail — mocked in tests (⭐ star challenge)
 Task RecordAsync(IEnumerable<AuditTrailEntry> entries, CancellationToken ct);
 ```
