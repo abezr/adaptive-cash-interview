@@ -138,12 +138,12 @@ Run: `dotnet test`
 
 | Test Category | Test Count | Tests |
 |---------------|-----------|-------|
-| Basic Validation | 2 | Empty batch, valid order |
+| Basic Checks | 2 | Empty batch, accepted order |
 | Daily Limits | 5 | Exceeded, at limit, below limit, client-specific, default fallback |
-| Mixed Batches | 3 | Mixed limit exceeding/valid, running total, per-currency independence |
+| Mixed Batches | 3 | Mixed limit exceeding/accepted, running total, per-currency independence |
 | Persistence | 3 | Save accepted, no save for rejected, correct properties |
 | ⭐ Audit Trail | 4 | Accepted audit, rejected audit, client context, empty batch |
-| Edge Cases | 3 | Null input, cancellation, large valid amount |
+| Edge Cases | 3 | Null input, cancellation, large accepted amount |
 | **Total** | **20** | |
 
 All 20 tests must pass for a complete implementation.

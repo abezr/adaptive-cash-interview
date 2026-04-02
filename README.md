@@ -18,7 +18,7 @@ src/AdaptiveCash.Application/Services/CashOrderProcessingService.cs
 
 1. **Check daily limits** per bank client per currency (client-specific or global default of 500,000).
 2. **Track running totals** within the batch (multiple orders from the same client must be cumulative).
-3. **Save** valid orders to the database via the repository.
+3. **Save** accepted orders to the database via the repository.
 4. **Return** a `BatchProcessingResult` with accepted and rejected orders (with rejection reasons).
 
 ### ⭐ Star Challenge (Bonus)

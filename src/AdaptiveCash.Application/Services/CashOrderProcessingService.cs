@@ -13,7 +13,7 @@ namespace AdaptiveCash.Application.Services;
 /// 
 /// Requirements:
 ///   1. Check against the daily limit per bank client per currency.
-///   2. Save valid orders to the database.
+///   2. Save accepted orders to the database.
 ///   3. Return a BatchProcessingResult with accepted and rejected orders.
 /// 
 /// ⭐ BONUS (Star Challenge):
