@@ -16,11 +16,10 @@ src/AdaptiveCash.Application/Services/CashOrderProcessingService.cs
 
 ### Requirements
 
-1. **Validate** each order request (amount > 0, currency is supported).
-2. **Check daily limits** per bank client per currency (client-specific or global default of 500,000).
-3. **Track running totals** within the batch (multiple orders from the same client must be cumulative).
-4. **Save** valid orders to the database via the repository.
-5. **Return** a `BatchProcessingResult` with accepted and rejected orders (with rejection reasons).
+1. **Check daily limits** per bank client per currency (client-specific or global default of 500,000).
+2. **Track running totals** within the batch (multiple orders from the same client must be cumulative).
+3. **Save** valid orders to the database via the repository.
+4. **Return** a `BatchProcessingResult` with accepted and rejected orders (with rejection reasons).
 
 ### ⭐ Star Challenge (Bonus)
 
@@ -45,9 +44,9 @@ Review the architecture documentation in `docs/c4/` — specifically the **Compo
 dotnet test
 ```
 
-All **28 unit tests** must pass:
-- **22 tests** — basic task requirements (validation, limits, persistence)
-- **6 tests** — ⭐ star challenge (audit trail integration)
+All **20 unit tests** must pass:
+- **16 tests** — basic task requirements (limits, persistence)
+- **4 tests** — ⭐ star challenge (audit trail integration)
 
 ## 🏗️ Project Structure
 
@@ -76,7 +75,7 @@ adaptive-cash-interview/
 │   └── AdaptiveCash.Infrastructure/  # (stub — not needed for this task)
 ├── tests/
 │   └── AdaptiveCash.Application.Tests/
-│       └── CashOrderProcessingServiceTests.cs  # 28 failing tests
+│       └── CashOrderProcessingServiceTests.cs  # 20 failing tests
 ├── docs/
 │   ├── acceptance-criteria.md
 │   ├── adr/

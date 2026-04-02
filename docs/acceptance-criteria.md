@@ -11,22 +11,7 @@ Run: `dotnet test`
 
 ---
 
-## AC-1: Input Validation
-
-### AC-1.1: Amount Validation
-- **GIVEN** a cash order request with amount ≤ 0
-- **WHEN** the batch is processed
-- **THEN** the order is rejected with a non-empty reason string
-
-### AC-1.2: Currency Validation
-- **GIVEN** a cash order request with a currency not in `SupportedCurrencies`
-- **WHEN** the batch is processed
-- **THEN** the order is rejected with a non-empty reason string
-
-### AC-1.3: Currency Case Insensitivity
-- **GIVEN** a cash order request with currency "usd" (lowercase)
-- **WHEN** "USD" is in the supported currencies set
-- **THEN** the order is accepted (currency validation is case-insensitive)
+## AC-1: Basic Validation
 
 ### AC-1.4: Null Input
 - **GIVEN** a null value passed as requests
@@ -67,7 +52,7 @@ Run: `dotnet test`
 ## AC-3: Result Construction
 
 ### AC-3.1: Accepted Orders
-- **GIVEN** an order passes all validations
+- **GIVEN** an order passes the limit check
 - **WHEN** the result is constructed
 - **THEN** the accepted order has:
   - `Id`: a new, non-empty GUID
@@ -77,7 +62,7 @@ Run: `dotnet test`
   - All other properties copied from the request
 
 ### AC-3.2: Rejected Orders
-- **GIVEN** an order fails validation
+- **GIVEN** an order exceeds its daily limit
 - **WHEN** the result is constructed
 - **THEN** the rejected order contains:
   - The original `CashOrderRequest`
@@ -153,15 +138,15 @@ Run: `dotnet test`
 
 | Test Category | Test Count | Tests |
 |---------------|-----------|-------|
-| Basic Validation | 9 | Empty batch, valid order, zero/negative amount (×3), unsupported currency (×4), case insensitivity |
+| Basic Validation | 2 | Empty batch, valid order |
 | Daily Limits | 5 | Exceeded, at limit, below limit, client-specific, default fallback |
-| Mixed Batches | 3 | Mixed valid/invalid, running total, per-currency independence |
+| Mixed Batches | 3 | Mixed limit exceeding/valid, running total, per-currency independence |
 | Persistence | 3 | Save accepted, no save for rejected, correct properties |
 | ⭐ Audit Trail | 4 | Accepted audit, rejected audit, client context, empty batch |
-| Edge Cases | 4 | Null input, cancellation, large valid amount, boundary ★ |
-| **Total** | **28** | |
+| Edge Cases | 3 | Null input, cancellation, large valid amount |
+| **Total** | **20** | |
 
-All 28 tests must pass for a complete implementation.
-The first 22 tests (non-star) cover the basic task requirements.
-The last 6 tests cover the star challenge (audit trail integration).
+All 20 tests must pass for a complete implementation.
+The first 16 tests (non-star) cover the basic task requirements.
+The last 4 tests cover the star challenge (audit trail integration).
 

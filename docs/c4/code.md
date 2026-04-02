@@ -130,15 +130,7 @@ flowchart TD
 
     LOOP{"🔄 Next request"}:::router
 
-    VAMT["✅ Amount > 0 ?"]:::agent
-    LOOP --> VAMT
-
-    VAMT -- "no" --> REJ_AMT["❌ Reject: invalid amount"]:::escalation
-    VAMT -- "yes" --> VCUR
-
-    VCUR["✅ Currency supported ?"]:::agent
-    VCUR -- "no" --> REJ_CUR["❌ Reject: bad currency"]:::escalation
-    VCUR -- "yes" --> GET_LIMIT
+    LOOP --> GET_LIMIT
 
     GET_LIMIT["📊 Get effective limit"]:::context
     GET_LIMIT --> GET_TOTAL
@@ -149,9 +141,7 @@ flowchart TD
     CHECK -- "no" --> REJ_LIM["❌ Reject: limit exceeded"]:::escalation
     CHECK -- "yes" --> ACCEPT["✅ Accept order"]:::output
 
-    REJ_AMT --> NEXT["➡️ Continue"]:::router
-    REJ_CUR --> NEXT
-    REJ_LIM --> NEXT
+    REJ_LIM --> NEXT["➡️ Continue"]:::router
     ACCEPT --> NEXT
     NEXT --> LOOP
 
@@ -179,8 +169,6 @@ flowchart TD
 1. **Guard** — throw `ArgumentNullException` if requests is null
 2. **Initialize** — empty lists for accepted, rejected, audit entries; dictionary for running totals
 3. **For each request:**
-   - Validate amount > 0; reject with `Warning` audit if invalid
-   - Validate currency is in `SupportedCurrencies` (case-insensitive); reject with `Warning` if not
    - Get effective limit: `GetClientDailyLimitAsync()` → fallback to `DefaultMaxDailyAmount`
    - Get running total: `GetTotalOrderedTodayAsync()` + batch running total for same (clientId, currency)
    - If `currentTotal + amount > limit` → reject with `Warning` audit
@@ -196,8 +184,6 @@ flowchart TD
 | Scenario | Action | Severity |
 |----------|--------|----------|
 | Order accepted | `OrderAccepted` | Info |
-| Invalid amount | `OrderRejected` | Warning |
-| Unsupported currency | `OrderRejected` | Warning |
 | Limit exceeded | `OrderRejected` | Warning |
 | Empty batch | `EmptyBatchProcessed` | Info |
 

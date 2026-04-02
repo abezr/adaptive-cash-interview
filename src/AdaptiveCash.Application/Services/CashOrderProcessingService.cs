@@ -12,10 +12,9 @@ namespace AdaptiveCash.Application.Services;
 /// TODO: Implement the ProcessBatchAsync method according to the acceptance criteria.
 /// 
 /// Requirements:
-///   1. Validate each request (amount > 0, currency is supported).
-///   2. Check against the daily limit per bank client per currency.
-///   3. Save valid orders to the database.
-///   4. Return a BatchProcessingResult with accepted and rejected orders.
+///   1. Check against the daily limit per bank client per currency.
+///   2. Save valid orders to the database.
+///   3. Return a BatchProcessingResult with accepted and rejected orders.
 /// 
 /// ⭐ BONUS (Star Challenge):
 ///   Review the C4 Component diagram (docs/c4/component.md) to discover

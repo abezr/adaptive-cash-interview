@@ -103,90 +103,7 @@ public class CashOrderProcessingServiceTests
         accepted.Status.Should().Be(OrderStatus.Validated);
     }
 
-    [Theory]
-    [InlineData(0)]
-    [InlineData(-1)]
-    [InlineData(-100.50)]
-    public async Task ProcessBatchAsync_WithZeroOrNegativeAmount_RejectsOrder(decimal amount)
-    {
-        // Arrange
-        var requests = new List<CashOrderRequest>
-        {
-            new()
-            {
-                BankClientId = 1,
-                Amount = amount,
-                Currency = "USD",
-                RequestedDate = DateTime.UtcNow.Date
-            }
-        };
 
-        // Act
-        var result = await _sut.ProcessBatchAsync(requests);
-
-        // Assert
-        result.AcceptedOrders.Should().BeEmpty();
-        result.RejectedOrders.Should().HaveCount(1);
-        result.RejectedOrders[0].Reason.Should().NotBeNullOrWhiteSpace();
-    }
-
-    [Theory]
-    [InlineData("BTC")]
-    [InlineData("ETH")]
-    [InlineData("XYZ")]
-    [InlineData("")]
-    public async Task ProcessBatchAsync_WithUnsupportedCurrency_RejectsOrder(string currency)
-    {
-        // Arrange
-        var requests = new List<CashOrderRequest>
-        {
-            new()
-            {
-                BankClientId = 1,
-                Amount = 10_000m,
-                Currency = currency,
-                RequestedDate = DateTime.UtcNow.Date
-            }
-        };
-
-        // Act
-        var result = await _sut.ProcessBatchAsync(requests);
-
-        // Assert
-        result.AcceptedOrders.Should().BeEmpty();
-        result.RejectedOrders.Should().HaveCount(1);
-        result.RejectedOrders[0].Reason.Should().NotBeNullOrWhiteSpace();
-    }
-
-    [Fact]
-    public async Task ProcessBatchAsync_CurrencyValidation_IsCaseInsensitive()
-    {
-        // Arrange
-        var requests = new List<CashOrderRequest>
-        {
-            new()
-            {
-                BankClientId = 1,
-                Amount = 5_000m,
-                Currency = "usd", // lowercase should be valid
-                RequestedDate = DateTime.UtcNow.Date
-            }
-        };
-
-        _repositoryMock
-            .Setup(r => r.GetTotalOrderedTodayAsync(1, It.IsAny<string>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(0m);
-
-        _repositoryMock
-            .Setup(r => r.GetClientDailyLimitAsync(1, It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((ClientDailyLimit?)null);
-
-        // Act
-        var result = await _sut.ProcessBatchAsync(requests);
-
-        // Assert
-        result.AcceptedOrders.Should().HaveCount(1);
-    }
 
     // ========================================================================
     // DAILY LIMIT TESTS
@@ -362,10 +279,10 @@ public class CashOrderProcessingServiceTests
         // Arrange
         var requests = new List<CashOrderRequest>
         {
-            new() { BankClientId = 1, Amount = 10_000m, Currency = "USD", RequestedDate = DateTime.UtcNow.Date },   // valid
-            new() { BankClientId = 2, Amount = -5_000m, Currency = "USD", RequestedDate = DateTime.UtcNow.Date },   // invalid: negative
-            new() { BankClientId = 3, Amount = 20_000m, Currency = "BTC", RequestedDate = DateTime.UtcNow.Date },   // invalid: unsupported currency
-            new() { BankClientId = 1, Amount = 30_000m, Currency = "EUR", RequestedDate = DateTime.UtcNow.Date },   // valid
+            new() { BankClientId = 1, Amount = 10_000m, Currency = "USD", RequestedDate = DateTime.UtcNow.Date },   // valid, below 500k
+            new() { BankClientId = 2, Amount = 600_000m, Currency = "USD", RequestedDate = DateTime.UtcNow.Date },   // invalid: exceeds limit
+            new() { BankClientId = 3, Amount = 800_000m, Currency = "BTC", RequestedDate = DateTime.UtcNow.Date },   // invalid: exceeds limit
+            new() { BankClientId = 1, Amount = 30_000m, Currency = "EUR", RequestedDate = DateTime.UtcNow.Date },   // valid, below 500k
         };
 
         _repositoryMock
@@ -475,12 +392,20 @@ public class CashOrderProcessingServiceTests
     [Fact]
     public async Task ProcessBatchAsync_DoesNotSaveRejectedOrders()
     {
-        // Arrange — all orders are invalid
+        // Arrange — all orders exceed limit
         var requests = new List<CashOrderRequest>
         {
-            new() { BankClientId = 1, Amount = -100m, Currency = "USD", RequestedDate = DateTime.UtcNow.Date },
-            new() { BankClientId = 2, Amount = 500m, Currency = "BTC", RequestedDate = DateTime.UtcNow.Date },
+            new() { BankClientId = 1, Amount = 600_000m, Currency = "USD", RequestedDate = DateTime.UtcNow.Date },
+            new() { BankClientId = 2, Amount = 800_000m, Currency = "BTC", RequestedDate = DateTime.UtcNow.Date },
         };
+
+        _repositoryMock
+            .Setup(r => r.GetTotalOrderedTodayAsync(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(0m);
+
+        _repositoryMock
+            .Setup(r => r.GetClientDailyLimitAsync(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((ClientDailyLimit?)null);
 
         // Act
         var result = await _sut.ProcessBatchAsync(requests);
@@ -576,8 +501,16 @@ public class CashOrderProcessingServiceTests
         // Arrange
         var requests = new List<CashOrderRequest>
         {
-            new() { BankClientId = 1, Amount = -500m, Currency = "USD", RequestedDate = DateTime.UtcNow.Date },
+            new() { BankClientId = 1, Amount = 600_000m, Currency = "USD", RequestedDate = DateTime.UtcNow.Date },
         };
+
+        _repositoryMock
+            .Setup(r => r.GetTotalOrderedTodayAsync(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(0m);
+
+        _repositoryMock
+            .Setup(r => r.GetClientDailyLimitAsync(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((ClientDailyLimit?)null);
 
         // Act
         await _sut.ProcessBatchAsync(requests);
