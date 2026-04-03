@@ -198,7 +198,7 @@ WHEN NOT MATCHED THEN INSERT (ExternalId, Amount, ...) VALUES (source.ExternalId
    → Оптимістичний/песимістичний lock на рівні БД. `SELECT ... WITH (UPDLOCK, HOLDLOCK)` або версіонність рядка. На рівні додатку — distributed lock (Redis) або serializable transaction
 
 3. *Як покрити тестами?*
-   → Mock репозиторій та audit trail через Moq. Тест-кейси: happy path, кожен тип rejection, boundary cases (exactly at limit), mixed batch, running totals, empty batch, null input
+   → Mock репозиторій через Moq. Тест-кейси: happy path, кожен тип rejection, boundary cases (exactly at limit), mixed batch, running totals, empty batch, null input
 
 **Опціонально (AI-челлендж)**: Генерація фронтенд-дашборду з використанням AI-інструментів. Див. `frontend-challenge/README.md`
 
@@ -221,8 +221,6 @@ WHEN NOT MATCHED THEN INSERT (ExternalId, Amount, ...) VALUES (source.ExternalId
 9. **Post-deploy**: health checks, rollback trigger при помилках
 - **Azure DevOps**: YAML pipelines, environments з approval policies, variable groups для секретів
 
----
-
 ### Q16 (5 хв): Тестування
 **Питання**: Як підходите до тестування? Які тест-кейси написали б для сервісу з кодинг-завдання?
 
@@ -235,7 +233,7 @@ WHEN NOT MATCHED THEN INSERT (ExternalId, Amount, ...) VALUES (source.ExternalId
   - Running total: два orders одного клієнта, другий перевищує → перший accepted, другий rejected
   - Persistence: accepted orders → `SaveOrdersAsync` called, all rejected → NOT called
   - Edge: empty batch → empty result, null → ArgumentNullException
-- **Мокаємо**: `ICashOrderRepository`, `IAuditTrailService` через Moq. `ILogger` — mock або `NullLogger`
+- **Мокаємо**: `ICashOrderRepository` через Moq. `ILogger` — mock або `NullLogger`
 - **Integration тести**: `WebApplicationFactory<Program>` для end-to-end через HTTP, in-memory database або Testcontainers для реальної БД
 
 ---
@@ -268,7 +266,7 @@ WHEN NOT MATCHED THEN INSERT (ExternalId, Amount, ...) VALUES (source.ExternalId
 
 | Рівень | Опис |
 |--------|------|
-| **Strong Hire** | Відповідає глибше ніж оптимальні відповіді, демонструє trade-off мислення, помічає audit trail без підказок |
-| **Hire** | Покриває більшість оптимальних відповідей, проходить базовий кодинг + частину star challenge |
-| **Lean Hire** | Покриває основи, кодинг працює але без star challenge, потребує менторства |
+| **Strong Hire** | Відповідає глибше ніж оптимальні відповіді, демонструє trade-off мислення, помічає проблеми продуктивності без підказок |
+| **Hire** | Покриває більшість оптимальних відповідей, проходить базовий кодинг |
+| **Lean Hire** | Покриває основи, кодинг працює, потребує менторства |
 | **No Hire** | Не може пояснити DI lifetimes або async, кодинг не компілюється, поверхневі відповіді |
