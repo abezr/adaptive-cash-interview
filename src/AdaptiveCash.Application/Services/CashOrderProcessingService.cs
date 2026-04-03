@@ -43,26 +43,25 @@ public class CashOrderProcessingService : ICashOrderProcessingService
         // and req1.Currency == req2.Currency. They annihilate each other and should be skipped.
         // BUG: O(N^2) naive approach causing massive CPU lag on large batches!
         // ------------------------------------------------------------------------------------
-        var validRequests = new List<CashOrderRequest>();
-        var map = new Dictionary<(int, string, decimal), Stack<CashOrderRequest>>();
-
-        foreach (var req in requestList)
+        var toRemove = new HashSet<CashOrderRequest>();
+        for (int i = 0; i < requestList.Count; i++)
         {
-            var oppKey = (req.BankClientId, req.Currency, -req.Amount);
-
-            if (map.TryGetValue(oppKey, out var stack) && stack.Count > 0)
+            if (toRemove.Contains(requestList[i])) continue;
+            for (int j = i + 1; j < requestList.Count; j++)
             {
-                stack.Pop(); // Annihilated
-            }
-            else
-            {
-                var key = (req.BankClientId, req.Currency, req.Amount);
-                if (!map.ContainsKey(key)) map[key] = new Stack<CashOrderRequest>();
-                map[key].Push(req);
+                if (!toRemove.Contains(requestList[j]) && 
+                    requestList[i].BankClientId == requestList[j].BankClientId &&
+                    requestList[i].Currency == requestList[j].Currency &&
+                    requestList[i].Amount == -requestList[j].Amount)
+                {
+                    toRemove.Add(requestList[i]);
+                    toRemove.Add(requestList[j]);
+                    break;
+                }
             }
         }
 
-        validRequests = map.Values.SelectMany(s => s).ToList();
+        var validRequests = requestList.Where(r => !toRemove.Contains(r)).ToList();
 
         // ------------------------------------------------------------------------------------
         // PHASE 2: LIMIT CHECKING & EXTERNAL DISPATCH
@@ -70,44 +69,39 @@ public class CashOrderProcessingService : ICashOrderProcessingService
         // BUG: Thread-unsafe collections used inside Task.WhenAll.
         // BUG: Limit Race Condition - intra-batch accumulation is ignored due to concurrency!
         // ------------------------------------------------------------------------------------
-        var acceptedOrders = new System.Collections.Concurrent.ConcurrentBag<CashOrder>(); 
-        var rejectedOrders = new System.Collections.Concurrent.ConcurrentBag<RejectedOrder>(); 
-        
-        var toDispatch = new List<CashOrderRequest>();
+        var acceptedOrders = new List<CashOrder>(); // Thread unsafe!
+        var rejectedOrders = new List<RejectedOrder>(); // Thread unsafe!
 
-        // Safely determine limits sequentially by client to avoid race conditions
-        foreach(var group in validRequests.GroupBy(r => new { r.BankClientId, r.Currency }))
+        var tasks = validRequests.Select(async req => 
         {
-            var limitObj = await _repository.GetClientDailyLimitAsync(group.Key.BankClientId, group.Key.Currency, cancellationToken);
+            var limitObj = await _repository.GetClientDailyLimitAsync(req.BankClientId, req.Currency, cancellationToken);
             decimal limit = limitObj?.MaxDailyAmount ?? _options.DefaultMaxDailyAmount;
             
-            decimal runningTotal = await _repository.GetTotalOrderedTodayAsync(group.Key.BankClientId, group.Key.Currency, DateTime.UtcNow.Date, cancellationToken);
+            // Limit Race Condition: Evaluates without accumulating intra-batch sums!
+            decimal runningTotal = await _repository.GetTotalOrderedTodayAsync(req.BankClientId, req.Currency, DateTime.UtcNow.Date, cancellationToken);
 
-            foreach(var req in group) 
+            if (runningTotal + req.Amount > limit)
             {
-                if (runningTotal + req.Amount > limit)
-                {
-                    rejectedOrders.Add(new RejectedOrder { Request = req, Reason = "Daily limit exceeded" });
-                }
-                else
-                {
-                    runningTotal += req.Amount; // Track dynamically!
-                    toDispatch.Add(req);
-                }
+                rejectedOrders.Add(new RejectedOrder { Request = req, Reason = "Daily limit exceeded" });
+                return;
             }
-        }
 
-        var tasks = toDispatch.Select(async req => 
-        {
+            // Dispatch to External Gateway (simulated Network I/O)
             var paymentResult = await _gateway.ProcessPaymentAsync(req, cancellationToken);
 
             if (paymentResult.IsSuccess)
             {
                 var newOrder = new CashOrder
                 {
-                    Id = Guid.NewGuid(), BankClientId = req.BankClientId, Amount = req.Amount, Currency = req.Currency,
-                    RequestedDate = req.RequestedDate, CreatedAtUtc = DateTime.UtcNow, Status = OrderStatus.Validated
+                    Id = Guid.NewGuid(),
+                    BankClientId = req.BankClientId,
+                    Amount = req.Amount,
+                    Currency = req.Currency,
+                    RequestedDate = req.RequestedDate,
+                    CreatedAtUtc = DateTime.UtcNow,
+                    Status = OrderStatus.Validated
                 };
+                
                 acceptedOrders.Add(newOrder); 
             }
         });
