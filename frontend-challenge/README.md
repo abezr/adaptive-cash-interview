@@ -56,6 +56,7 @@ See the schematic wireframe sketches in the `mockups/` directory:
 
 - `mockups/dashboard_main.png` — Schematic blueprint of the main layout, KPIs, charts, and table.
 - `mockups/dashboard_dataflow.png` — Schematic blueprint of the system architecture and data flow.
+- `mockups/dashboard_delivery.png` — Real-time cash delivery monitoring (transit routes and logistics).
 
 ### Design Guidelines
 - **Dark mode** with navy background (#0f172a)
