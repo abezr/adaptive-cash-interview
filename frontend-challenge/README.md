@@ -9,7 +9,7 @@ Using AI tools (Cursor, GitHub Copilot, ChatGPT, etc.), generate a frontend dash
 
 ## 📋 Requirements
 
-Build a single-page dashboard (React, Angular, or Vue — your choice) that displays:
+Build a single-page dashboard using **React** that displays:
 
 ### 1. Order Processing KPI Cards
 - Total orders processed today
