@@ -186,11 +186,8 @@ WHEN NOT MATCHED THEN INSERT (ExternalId, Amount, ...) VALUES (source.ExternalId
 
 Кандидат отримує репозиторій `adaptive-cash-interview` та має імплементувати `CashOrderProcessingService.ProcessBatchAsync()`.
 
-**Базове завдання** (18 тестів):
-- Валідація, ліміти, running totals, persistence
-
-**⭐ Завдання із зірочкою** (4 додаткових тести):
-- Кандидат має прочитати C4 Component діаграму і виявити вимогу audit trail
+**Базове завдання** (5 тестів):
+- Алгоритмічна складність (O(N) vs O(N^2)), стан-гонка лімітів, thread-safety колекцій.
 
 **Додаткові запитання після кодингу**:
 

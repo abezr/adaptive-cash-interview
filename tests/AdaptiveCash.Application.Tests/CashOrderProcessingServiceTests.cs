@@ -25,7 +25,6 @@ namespace AdaptiveCash.Application.Tests;
 public class CashOrderProcessingServiceTests
 {
     private readonly Mock<ICashOrderRepository> _repositoryMock;
-    private readonly Mock<IAuditTrailService> _auditTrailServiceMock;
     private readonly Mock<IExternalPaymentGateway> _gatewayMock;
     private readonly Mock<ILogger<CashOrderProcessingService>> _loggerMock;
     private readonly CashOrderProcessingOptions _options;
@@ -34,7 +33,6 @@ public class CashOrderProcessingServiceTests
     public CashOrderProcessingServiceTests()
     {
         _repositoryMock = new Mock<ICashOrderRepository>();
-        _auditTrailServiceMock = new Mock<IAuditTrailService>();
         _gatewayMock = new Mock<IExternalPaymentGateway>();
         _gatewayMock.Setup(g => g.ProcessPaymentAsync(It.IsAny<CashOrderRequest>(), It.IsAny<CancellationToken>()))
                     .ReturnsAsync(new PaymentResult { IsSuccess = true });
@@ -51,7 +49,6 @@ public class CashOrderProcessingServiceTests
 
         _sut = new CashOrderProcessingService(
             _repositoryMock.Object,
-            _auditTrailServiceMock.Object,
             _gatewayMock.Object,
             _options,
             _loggerMock.Object);
@@ -153,53 +150,7 @@ public class CashOrderProcessingServiceTests
         result.RejectedOrders[0].Request.Amount.Should().Be(60_000m);
     }
 
-    [Fact]
-    public async Task ProcessBatchAsync_RecordsAuditTrail_ForRejectedOrders()
-    {
-        // Arrange
-        var requests = new List<CashOrderRequest>
-        {
-            new() { BankClientId = 1, Amount = 600_000m, Currency = "USD", RequestedDate = DateTime.UtcNow.Date },
-        };
 
-        _repositoryMock
-            .Setup(r => r.GetTotalOrderedTodayAsync(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(0m);
-
-        _repositoryMock
-            .Setup(r => r.GetClientDailyLimitAsync(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((ClientDailyLimit?)null);
-
-        // Act
-        await _sut.ProcessBatchAsync(requests);
-
-        // Assert — rejections must also be audited with Warning severity
-        _auditTrailServiceMock.Verify(
-            a => a.RecordAsync(
-                It.Is<IEnumerable<AuditTrailEntry>>(entries =>
-                    entries.Any(e =>
-                        e.EntityType == "CashOrder" &&
-                        e.Severity == AuditSeverity.Warning)),
-                It.IsAny<CancellationToken>()),
-            Times.Once);
-    }
-
-    [Fact]
-    public async Task ProcessBatchAsync_EmptyBatch_StillRecordsAuditTrail()
-    {
-        // Arrange
-        var requests = Enumerable.Empty<CashOrderRequest>();
-
-        // Act
-        await _sut.ProcessBatchAsync(requests);
-
-        // Assert — even empty batches should be audited for traceability
-        _auditTrailServiceMock.Verify(
-            a => a.RecordAsync(
-                It.IsAny<IEnumerable<AuditTrailEntry>>(),
-                It.IsAny<CancellationToken>()),
-            Times.Once);
-    }
 
     [Fact]
     public async Task ProcessBatchAsync_WithLargeBatchOfPairs_AnnihilatesEfficientlyWithinTimeLimit()
